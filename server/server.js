@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const uuidv4 = require('uuid/v4');
 
+//const pcm_file = './test.raw';
 const pcm_file = './out.raw';
 let interval = 0,
     sampleRate = 44100,
