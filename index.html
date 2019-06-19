@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dandy Mix Space</title>
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+    <script type="text/javascript" src="./pcm-player.js"></script>
+    <script type="text/javascript" src="./three.js"></script>
+    <script type="text/javascript" src="./OrbitControls.js"></script>
+    <script>
+
+        var camera, scene, renderer, controls;
+        var mesh;
+        var boxes = []
+        window.data = []
+        var box_count = 2048;
+        window.box_count = box_count;
+
+        init();
+        animate();
+
+        
+
+        function init() {
+            console.log("init")
+            
+            
+            camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 10 );
+            camera.position.z = 1;
+            
+
+            scene = new THREE.Scene();
+
+            boxes = []
+            for (i = 0; i < box_count; i++)
+            {
+                var size = 0.005;
+                geometry = new THREE.BoxGeometry(size, size, size);
+                material = new THREE.MeshNormalMaterial();
+
+                mesh = new THREE.Mesh(geometry, material);
+                mesh.position.x = 2 / box_count * i - 1;
+                mesh.position.y = -0.8;
+                scene.add(mesh);
+                boxes[i] = mesh;
+            }
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            window.addEventListener( 'resize', onWindowResize, false );
+           
+
+        }
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+        }
+
+        var startOff = Date.now();
+        var analyser;
+        var bufferLength;
+        var dataArray;    
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+
+            var player = window.pcm;
+            if (typeof player === "undefined" || typeof player.sources[player.current] === "undefined" ||
+                typeof player.sources[player.current].buffer === "undefined")
+            {
+                return;
+            }
+            if (typeof analyser === "undefined")
+            {
+                analyser = player.analyser;
+                bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+            }
+
+            
+            var buf = player.sources[player.current].buffer;
+            var data = new Float32Array(box_count);
+            var start = (Date.now()-startOff)*(44100/1000);
+
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            //console.log(start);
+
+            if (start > buf.length-box_count)            
+                start = buf.length-box_count;
+            buf.copyFromChannel(data, 0, start);
+
+            if (player.reset)
+            {
+                startOff = Date.now();
+                player.reset = false;
+                //console.log("reset")
+            }
+
+            for (i = 0; i < box_count; i++)
+            {             
+                //pos = data[i]*0.2;
+                pos = (dataArray[i])/255 - 0.5;
+                boxes[i].position.y = pos;
+            }
+
+
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+
+
+<script>
+
+function handleError()
+{
+
+}
+
+ window.onload = function() {
+   var socketURL = 'ws://localhost:8080';
+   var player = new PCMPlayer({
+        encoding: '16bitInt',
+        channels: 2,
+        sampleRate: 44100,
+        flushingTime: 1000
+   });
+
+   var ws = new WebSocket(socketURL);
+       
+       ws.binaryType = 'arraybuffer';
+       ws.addEventListener('message',function(event) {
+            var data = new Uint16Array(event.data);
+            player.feed(data);
+            // Now FFT the data 
+
+       });
+ }   
+</script>
+
+</body>
+</html>
+
