@@ -23,7 +23,7 @@
         init();
         animate();
 
-        
+        var line;
 
         function init() {
             console.log("init")
@@ -41,15 +41,6 @@
             {
                 var size = 0.005;
                 var width = 2.4;
-                geometry = new THREE.BoxGeometry(size, size, size);
-                material = new THREE.MeshNormalMaterial();
-
-                mesh = new THREE.Mesh(geometry, material);
-                mesh.position.x = width / box_count * i - width/2;
-                mesh.position.y = -0.8;
-                scene.add(mesh);
-                boxes[i] = mesh;
-
 
                 geometry = new THREE.BoxGeometry(size, size, size);
                 material = new THREE.MeshNormalMaterial();
@@ -63,6 +54,28 @@
             }
 
 
+            // Line
+            // geometry
+            var line_geometry = new THREE.BufferGeometry();
+
+            // attributes
+            var positions = new Float32Array( box_count * 3 ); // 3 vertices per point
+            line_geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            // draw range
+            var drawCount = box_count; // draw the first ALL OF THE points, only
+            line_geometry.setDrawRange(0, drawCount);
+
+            // material
+            var material = new THREE.LineBasicMaterial( { color: 0xff0000, linewidth: 2 } );
+
+            // line
+            line = new THREE.Line(line_geometry,  material);
+            scene.add(line);
+
+            updatePositions(box_count);
+
+
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -71,6 +84,32 @@
            
 
         }
+
+        // update positions
+        function updatePositions(count, data = new Float32Array(count)) 
+        {
+
+            var positions = line.geometry.attributes.position.array;
+
+            var x = y = z = index = 0;
+
+            for (var i = 0, l = count; i < l; i++) 
+            {
+
+                var width = 2.4;
+                pos = (data[i])*0.2+0.4;
+                x = width / count * i - width/2;
+                y = pos;
+
+                positions[ index ++ ] = x;
+                positions[ index ++ ] = y;
+                positions[ index ++ ] = z;
+
+            }
+            line.geometry.attributes.position.needsUpdate = true;
+
+        }
+
 
         function onWindowResize() {
 
@@ -128,11 +167,9 @@
             {             
                 pos = (dataArray[i])/255 * 0.8 - 0.6;
                 fftboxes[i].position.y = pos;
-
-                pos = data[i]*0.2+0.4;
-                boxes[i].position.y = pos;
             }
-
+            
+            updatePositions(box_count, data);
 
 
             renderer.render(scene, camera);

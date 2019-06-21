@@ -51,6 +51,7 @@ PCMPlayer.prototype.createContext = function() {
     this.current = 0;
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 4096;
+    this.analyser.smoothingTimeConstant = 0.1;
 
     window.pcm = this;
 };
