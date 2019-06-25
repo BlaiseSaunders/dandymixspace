@@ -7,6 +7,15 @@ body {
 	line-height: 24px;
 }
 
+#info {
+	position: absolute;
+	top: 50px;
+	width: 100%;
+	text-align: center;
+	z-index: 100;
+	display:block;
+}
+
 a {
 	color: #ff0;
 	text-decoration: none;

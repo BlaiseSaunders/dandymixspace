@@ -7,6 +7,7 @@
     <link type="text/css" rel="stylesheet" href="main.css">
 </head>
 <body>
+    <div id="info">Description</div>
     <script type="text/javascript" src="./pcm-player.js"></script>
     <script type="text/javascript" src="./three.js"></script>
     <script type="text/javascript" src="./OrbitControls.js"></script>
@@ -24,6 +25,7 @@
         animate();
 
         var line;
+        var cube;
 
         function init() {
             console.log("init")
@@ -75,6 +77,9 @@
 
             updatePositions(box_count);
 
+            cube = new THREE.Mesh(new THREE.CubeGeometry(0.5, 0.5, 0.5), new THREE.MeshNormalMaterial());
+            scene.add(cube);
+
 
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -120,10 +125,26 @@
 
         }
 
+
+        var SPEED = 0.01;
+
+        function rotateCube() 
+        {
+            cube.rotation.x -= SPEED * 2;
+            cube.rotation.y -= SPEED;
+            cube.rotation.z -= SPEED * 3;
+        }
+
         var startOff = Date.now();
         var analyser;
         var bufferLength;
         var dataArray;    
+        var avglen = 1;
+        var avgpos = 0;
+        var thresh = 0.15;
+        var avgfull = false;
+        var avgavg = [avglen];
+        var pretotal = 0;
         function animate() {
 
             requestAnimationFrame(animate);
@@ -163,14 +184,58 @@
                 //console.log("reset")
             }
 
-            for (i = 0; i < box_count; i++)
-            {             
+            var avg = 0;
+            var lowpass = 16;
+            var fftOff = 10;
+            for (i = fftOff; i < box_count/lowpass; i++)
+            {           
+                avg += dataArray[i]; 
                 pos = (dataArray[i])/255 * 0.8 - 0.6;
                 fftboxes[i].position.y = pos;
             }
+            avg /= box_count/lowpass - fftOff;
+            avgavg[avgpos] = avg;
+            var totalavg = 0;
+            if (avgpos < avglen)
+                avgpos++;
+            else
+            {
+                avgpos = 0;
+                var tmpavg = 0;
+                for (let i = 0; i < avglen; i++)
+                    tmpavg = avgavg[i]
+                tmpavg /= avglen;
+                
+                totalavg = tmpavg;
+                
+                text = totalavg/pretotal*100
+
+
+                var size = 0;
+                if (totalavg / pretotal - 1 > thresh)
+                {
+                    text = 'BEAT';
+                    size = totalavg/pretotal-1;
+                    
+                }
+                cube.scale.x = size;
+                cube.scale.y = size;
+                cube.scale.z = size;
+
+                document.getElementById('info').innerHTML = text;
+
+
+                pretotal = totalavg;
+            }
+           
+            
+            cube.position.x = 0.3;
+            cube.position.y = -0.2;
+
             
             updatePositions(box_count, data);
 
+            rotateCube();
 
             renderer.render(scene, camera);
 
