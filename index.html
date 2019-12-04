@@ -25,6 +25,7 @@
         animate();
 
         var line;
+        var FFTline;
         var cube;
 
         function init() {
@@ -59,29 +60,38 @@
             // Line
             // geometry
             var line_geometry = new THREE.BufferGeometry();
+            var FFTline_geometry = new THREE.BufferGeometry();
 
             // attributes
             var positions = new Float32Array( box_count * 3 ); // 3 vertices per point
+            var FFTpositions = new Float32Array( box_count * 3 ); // 3 vertices per point
             line_geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+            FFTline_geometry.addAttribute('position', new THREE.BufferAttribute(FFTpositions, 3));
 
             // draw range
             var drawCount = box_count; // draw the first ALL OF THE points, only
             line_geometry.setDrawRange(0, drawCount);
+            FFTline_geometry.setDrawRange(0, drawCount);
 
             // material
             var material = new THREE.LineBasicMaterial( { color: 0xff0000, linewidth: 2 } );
 
             // line
             line = new THREE.Line(line_geometry,  material);
+            FFTline = new THREE.Line(FFTline_geometry,  material);
+            scene.add(FFTline);
             scene.add(line);
 
-            updatePositions(box_count);
+            updatePositions(box_count, line);
+            updatePositions(box_count, FFTline);
 
+            // Add in our pretty flashy cube :^)
             cube = new THREE.Mesh(new THREE.CubeGeometry(0.5, 0.5, 0.5), new THREE.MeshNormalMaterial());
             scene.add(cube);
 
 
 
+            // Setup our renderer 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
@@ -90,11 +100,12 @@
 
         }
 
-        // update positions
-        function updatePositions(count, data = new Float32Array(count)) 
+
+        // update the positions of our lines
+        function updatePositions(count, modline, yoff = 0.4, data = new Float32Array(count), scalar = 0.2) 
         {
 
-            var positions = line.geometry.attributes.position.array;
+            var positions = modline.geometry.attributes.position.array;
 
             var x = y = z = index = 0;
 
@@ -102,20 +113,21 @@
             {
 
                 var width = 2.4;
-                pos = (data[i])*0.2+0.4;
+                pos = (data[i])*scalar+yoff; // Shrink and move 'er up
                 x = width / count * i - width/2;
                 y = pos;
 
-                positions[ index ++ ] = x;
-                positions[ index ++ ] = y;
-                positions[ index ++ ] = z;
+                positions[index++] = x;
+                positions[index++] = y;
+                positions[index++] = z;
 
             }
-            line.geometry.attributes.position.needsUpdate = true;
+            modline.geometry.attributes.position.needsUpdate = true;
 
         }
 
 
+        // This comment left as an exercise for the reader :^)
         function onWindowResize() {
 
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -128,6 +140,7 @@
 
         var SPEED = 0.01;
 
+        // YOU TELL ME XD
         function rotateCube() 
         {
             cube.rotation.x -= SPEED * 2;
@@ -186,14 +199,22 @@
 
             var avg = 0;
             var lowpass = 16;
-            var fftOff = 10;
-            for (i = fftOff; i < box_count/lowpass; i++)
-            {           
+            var lowPassLowerHz = 4;
+            var lowPassUpperHz = 15; // FFT Range is 2048, assuming roughly ~= 0-2000Hz, calculate filter values from there
+            //for (i = fftOff; i < box_count/lowpass; i++)
+
+            var scaledFFT = new Float32Array(box_count);
+
+            for (i = lowPassLowerHz; i < lowPassUpperHz; i++)
                 avg += dataArray[i]; 
+            for (i = 0; i < box_count; i++)
+            {
                 pos = (dataArray[i])/255 * 0.8 - 0.6;
-                fftboxes[i].position.y = pos;
+                //fftboxes[i].position.y = pos;
+                fftboxes[i].position.y = -10;
+                scaledFFT[i] = pos;
             }
-            avg /= box_count/lowpass - fftOff;
+            avg /= lowPassUpperHz - lowPassLowerHz;
             avgavg[avgpos] = avg;
             var totalavg = 0;
             if (avgpos < avglen)
@@ -211,7 +232,7 @@
                 text = totalavg/pretotal*100
 
 
-                var size = 0;
+                var size = 0.001;
                 if (totalavg / pretotal - 1 > thresh)
                 {
                     text = 'BEAT';
@@ -229,11 +250,14 @@
             }
            
             
-            cube.position.x = 0.3;
+            cube.position.x = 0.7;
             cube.position.y = -0.2;
 
+
+
             
-            updatePositions(box_count, data);
+            updatePositions(box_count, line, 0.4, data, scalar = 0.2);
+            updatePositions(box_count, FFTline, 0.0, scaledFFT, scalar = 1);
 
             rotateCube();
 
