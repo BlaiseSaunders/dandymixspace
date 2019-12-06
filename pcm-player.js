@@ -1,4 +1,7 @@
-function PCMPlayer(option) {
+function PCMPlayer(option, fftSize = 4096) {
+    this.fftSize = fftSize;
+    console.log("FFT Size: " + this.fftSize);
+
     this.init(option);
 }
 
@@ -50,8 +53,8 @@ PCMPlayer.prototype.createContext = function() {
     this.sources = [];
     this.current = 0;
     this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = 4096;
-    this.analyser.smoothingTimeConstant = 0.05;
+    this.analyser.fftSize = this.fftSize;
+    this.analyser.smoothingTimeConstant = 0.5;
 
     window.pcm = this;
 };
@@ -105,6 +108,8 @@ PCMPlayer.prototype.flush = function() {
         i,
         decrement;
     this.audioBuffer = audioBuffer;
+
+    bufferSource.playbackRate.value = 1.0;
     
 
     for (channel = 0; channel < this.option.channels; channel++) {

@@ -15,10 +15,10 @@
 
         var camera, scene, renderer, controls;
         var mesh;
-        var boxes = []
-        var fftboxes = []
         window.data = []
-        var box_count = 2048; // Must be half FFT size
+        var fftSize = 16384;
+        var fftDivisor = 1;
+        var box_count = fftSize/2; // Must be half FFT size
         window.box_count = box_count;
 
         init();
@@ -38,25 +38,7 @@
 
             scene = new THREE.Scene();
 
-            boxes = []
-            fftboxes = []
-            for (i = 0; i < box_count; i++)
-            {
-                var size = 0.005;
-                var width = 2.4;
-
-                geometry = new THREE.BoxGeometry(size, size, size);
-                material = new THREE.MeshNormalMaterial();
-
-                mesh = new THREE.Mesh(geometry, material);
-                
-                mesh.position.x = width / box_count * i - width/2;
-                mesh.position.y = -0.8;
-                scene.add(mesh);
-                fftboxes[i] = mesh;
-            }
-
-
+        
             // Line
             // geometry
             var line_geometry = new THREE.BufferGeometry();
@@ -71,7 +53,7 @@
             // draw range
             var drawCount = box_count; // draw the first ALL OF THE points, only
             line_geometry.setDrawRange(0, drawCount);
-            FFTline_geometry.setDrawRange(0, drawCount);
+            FFTline_geometry.setDrawRange(0, drawCount/fftDivisor);
 
             // material
             var material = new THREE.LineBasicMaterial( { color: 0xff0000, linewidth: 2 } );
@@ -82,8 +64,6 @@
             scene.add(FFTline);
             scene.add(line);
 
-            updatePositions(box_count, line);
-            updatePositions(box_count, FFTline);
 
             // Add in our pretty flashy cube :^)
             cube = new THREE.Mesh(new THREE.CubeGeometry(0.5, 0.5, 0.5), new THREE.MeshNormalMaterial());
@@ -200,7 +180,7 @@
             var avg = 0;
             var lowpass = 16;
             var lowPassLowerHz = 4;
-            var lowPassUpperHz = 15; // FFT Range is 2048, assuming roughly ~= 0-2000Hz, calculate filter values from there
+            var lowPassUpperHz = 15; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
             //for (i = fftOff; i < box_count/lowpass; i++)
 
             var scaledFFT = new Float32Array(box_count);
@@ -211,7 +191,6 @@
             {
                 pos = (dataArray[i])/255 * 0.8 - 0.6;
                 //fftboxes[i].position.y = pos;
-                fftboxes[i].position.y = -10;
                 scaledFFT[i] = pos;
             }
             avg /= lowPassUpperHz - lowPassLowerHz;
@@ -257,44 +236,38 @@
 
             
             updatePositions(box_count, line, 0.4, data, scalar = 0.2);
-            updatePositions(box_count, FFTline, 0.0, scaledFFT, scalar = 1);
+            updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
 
             rotateCube();
 
             renderer.render(scene, camera);
 
         }
+        function handleError()
+        {
 
-    </script>
+        }
 
+        window.onload = function() {
+        var socketURL = 'ws://localhost:8080';
+        var player = new PCMPlayer({
+                encoding: '16bitInt',
+                channels: 2,
+                sampleRate: 44100,
+                flushingTime: 1000
+            }, fftSize);
 
-<script>
+        var ws = new WebSocket(socketURL);
 
-function handleError()
-{
-
-}
-
- window.onload = function() {
-   var socketURL = 'ws://localhost:8080';
-   var player = new PCMPlayer({
-        encoding: '16bitInt',
-        channels: 2,
-        sampleRate: 44100,
-        flushingTime: 1000
-   });
-
-   var ws = new WebSocket(socketURL);
-       
-       ws.binaryType = 'arraybuffer';
-       ws.addEventListener('message',function(event) {
+        ws.binaryType = 'arraybuffer';
+        ws.addEventListener('message',function(event) {
             var data = new Uint16Array(event.data);
             player.feed(data);
             // Now FFT the data 
 
-       });
- }   
-</script>
+            });
+        }  
+    </script>
 
 </body>
 </html>
