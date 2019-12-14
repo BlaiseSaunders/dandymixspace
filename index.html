@@ -17,7 +17,8 @@
         var mesh;
         window.data = []
         var fftSize = 16384;
-        var fftDivisor = 1;
+        //var fftDivisor = 64;
+        var fftDivisor = 128;
         var box_count = fftSize/2; // Must be half FFT size
         window.box_count = box_count;
 
@@ -28,41 +29,45 @@
         var FFTline;
         var cube;
 
-        function init() {
+
+        function createLine(size)
+        {
+            // Line
+            // geometry
+            var line_geometry = new THREE.BufferGeometry();
+
+            // attributes
+            var positions = new Float32Array(size * 3); // xyz(3) per point
+            line_geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            // draw range
+            line_geometry.setDrawRange(0, size);
+
+            // material
+            var material = new THREE.LineBasicMaterial({color: 0xff0000, linewidth: 2});
+
+            // line
+            t_line = new THREE.Line(line_geometry,  material);
+            scene.add(t_line);
+
+            return t_line;
+        }
+
+
+        function init() 
+        {
             console.log("init")
             
             
-            camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 10 );
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 10);
             camera.position.z = 1;
             
 
             scene = new THREE.Scene();
 
-        
-            // Line
-            // geometry
-            var line_geometry = new THREE.BufferGeometry();
-            var FFTline_geometry = new THREE.BufferGeometry();
-
-            // attributes
-            var positions = new Float32Array( box_count * 3 ); // 3 vertices per point
-            var FFTpositions = new Float32Array( box_count * 3 ); // 3 vertices per point
-            line_geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
-            FFTline_geometry.addAttribute('position', new THREE.BufferAttribute(FFTpositions, 3));
-
-            // draw range
-            var drawCount = box_count; // draw the first ALL OF THE points, only
-            line_geometry.setDrawRange(0, drawCount);
-            FFTline_geometry.setDrawRange(0, drawCount/fftDivisor);
-
-            // material
-            var material = new THREE.LineBasicMaterial( { color: 0xff0000, linewidth: 2 } );
-
-            // line
-            line = new THREE.Line(line_geometry,  material);
-            FFTline = new THREE.Line(FFTline_geometry,  material);
-            scene.add(FFTline);
-            scene.add(line);
+            var drawCount = box_count;
+            line = createLine(drawCount/fftDivisor);
+            FFTline = createLine(drawCount/fftDivisor);
 
 
             // Add in our pretty flashy cube :^)
@@ -70,16 +75,94 @@
             scene.add(cube);
 
 
+            //addExperimentalCube();
+            geomTest();
+
 
             // Setup our renderer 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
-            window.addEventListener( 'resize', onWindowResize, false );
+            window.addEventListener('resize', onWindowResize, false);
            
+
+
+            
+
 
         }
 
+        function addExperimentalCube() 
+        {
+
+        }
+
+
+
+        function discreteDerivative(inp)
+        {
+            out = new Float32Array(inp.length); 
+            for (var i = 0; i < inp.length-1; i++)
+            {
+                out[i] = inp[i+1]-inp[i]
+            }
+
+            return out;
+        }
+
+        function geomTest()
+        {   
+            let tess = 32;
+
+
+            let geometry = new THREE.Geometry();
+            for (let y = 0; y < tess; y += 1)
+            {
+                for (let x = 0; x < tess; x += 1)
+                {
+                    geometry.vertices.push(new THREE.Vector3(x/tess, 0,  y/tess));
+                }
+            }
+
+            //geometry.faces.push(new THREE.Face3(0, tess, 1));
+
+            for (let y = 0; y < tess-1; y += 1)
+            {
+                let ry = y*tess;
+                for (let x = 0; x < tess-1; x += 1)
+                {
+                    
+                    geometry.faces.push(
+                        new THREE.Face3(x+ry, x+ry+1, x+ry+tess),
+                        //new THREE.Face3(x+y+tess+1, x+y+1, x+y+tess)
+                    );
+                }
+            }
+
+            let uniforms = {
+                colorB: {type: 'vec3', value: new THREE.Color(0xACB6E5)},
+                colorA: {type: 'vec3', value: new THREE.Color(0x74ebd5)}
+            }
+
+            //geometry = new THREE.BoxGeometry(1, 1, 1);
+            let material =  new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                fragmentShader: fragmentShader(),
+                vertexShader: vertexShader(),
+            })
+
+            let mesh = new THREE.Mesh(geometry, material);
+            mesh.position.x = -1;
+            mesh.position.z = -1;
+            mesh.position.y = -0.5;
+            let s = 2;
+            mesh.scale.x = s;
+            mesh.scale.y = s;
+            mesh.scale.z = s;
+            scene.add(mesh);
+            //sceneObjects.push(mesh);
+
+        }
 
         // update the positions of our lines
         function updatePositions(count, modline, yoff = 0.4, data = new Float32Array(count), scalar = 0.2) 
@@ -179,13 +262,13 @@
 
             var avg = 0;
             var lowpass = 16;
-            var lowPassLowerHz = 4;
-            var lowPassUpperHz = 15; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
+            var lowPassLowerHz = 0;
+            var lowPassUpperHz = fftSize/64/2; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
             //for (i = fftOff; i < box_count/lowpass; i++)
 
             var scaledFFT = new Float32Array(box_count);
 
-            for (i = lowPassLowerHz; i < lowPassUpperHz; i++)
+            for (i = lowPassLowerHz; i < lowPassUpperHz; i++) // Sum our bandpass
                 avg += dataArray[i]; 
             for (i = 0; i < box_count; i++)
             {
@@ -193,12 +276,12 @@
                 //fftboxes[i].position.y = pos;
                 scaledFFT[i] = pos;
             }
-            avg /= lowPassUpperHz - lowPassLowerHz;
-            avgavg[avgpos] = avg;
+            avg /= lowPassUpperHz - lowPassLowerHz; // Final step to calculate average
+            avgavg[avgpos] = avg; // Drop in buffer of averages
             var totalavg = 0;
             if (avgpos < avglen)
                 avgpos++;
-            else
+            else // You tell me :P
             {
                 avgpos = 0;
                 var tmpavg = 0;
@@ -235,8 +318,10 @@
 
 
             
-            updatePositions(box_count, line, 0.4, data, scalar = 0.2);
-            updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
+            //updatePositions(box_count, line, 0.4, data, scalar = 0.2);
+            updatePositions(box_count/fftDivisor, line, 0.4, scaledFFT, scalar = 0.4);
+            //updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
+            updatePositions(box_count/fftDivisor, FFTline, -0.2, discreteDerivative(scaledFFT), scalar = 1);
 
             rotateCube();
 
@@ -267,6 +352,37 @@
 
             });
         }  
+
+
+
+
+        function vertexShader() 
+        {
+            return `
+                varying vec3 vUv; 
+
+                void main() 
+                {
+                    vUv = position; 
+
+                    vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * modelViewPosition; 
+                }
+            `
+        }
+        function fragmentShader()
+        {
+            return `
+                uniform vec3 colorA; 
+                uniform vec3 colorB; 
+                varying vec3 vUv;
+
+                void main() 
+                {
+                    gl_FragColor = vec4(mix(colorA, colorB, vUv.z), 1.0);
+                }
+            `
+        }
     </script>
 
 </body>
