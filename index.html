@@ -18,9 +18,14 @@
         window.data = []
         var fftSize = 16384;
         //var fftDivisor = 64;
-        var fftDivisor = 128;
+        var fftDivisor = 16;
         var box_count = fftSize/2; // Must be half FFT size
         window.box_count = box_count;
+        var freqBinCount = 128;
+        var freqBins = [];
+        var freqBinDepth = 32;
+        var freqBinIndex = 0;
+        var freqBinBuffered = false;
 
         init();
         animate();
@@ -53,10 +58,12 @@
             return t_line;
         }
 
+       
+       
 
         function init() 
         {
-            console.log("init")
+            console.log("Initializing DandyDance Web :^)...")
             
             
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 10);
@@ -76,20 +83,23 @@
 
 
             //addExperimentalCube();
-            geomTest();
+            //geomTest();
 
 
             // Setup our renderer 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({antialias: true});
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
             window.addEventListener('resize', onWindowResize, false);
            
 
 
+            for (var i = 0; i < this.freqBinCount; i++)
+                this.freqBins.push(new Float32Array(this.fftSize));
+
+
             
-
-
+            console.log("Initialized DandyDance Web :^)")
         }
 
         function addExperimentalCube() 
@@ -99,12 +109,17 @@
 
 
 
+        function dd(inp)
+        {
+            return discreteDerivative(inp);
+        }
+
         function discreteDerivative(inp)
         {
             out = new Float32Array(inp.length); 
             for (var i = 0; i < inp.length-1; i++)
             {
-                out[i] = inp[i+1]-inp[i]
+                out[i] = inp[i+1]-inp[i];
             }
 
             return out;
@@ -175,7 +190,7 @@
             for (var i = 0, l = count; i < l; i++) 
             {
 
-                var width = 2.4;
+                var width = 2.4; // Arbitrary, covers good portion of screen
                 pos = (data[i])*scalar+yoff; // Shrink and move 'er up
                 x = width / count * i - width/2;
                 y = pos;
@@ -191,13 +206,11 @@
 
 
         // This comment left as an exercise for the reader :^)
-        function onWindowResize() {
-
+        function onWindowResize() 
+        {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
-
             renderer.setSize(window.innerWidth, window.innerHeight);
-
         }
 
 
@@ -221,6 +234,10 @@
         var avgfull = false;
         var avgavg = [avglen];
         var pretotal = 0;
+
+
+
+
         function animate() {
 
             requestAnimationFrame(animate);
@@ -246,8 +263,30 @@
 
             
             analyser.getByteFrequencyData(dataArray);
+
+
+            /* 
+             * Store the data into our time series arrays after division 
+             */
+            var dataArrayCopy = new Float32Array(bufferLength);
+            for (var i = 0; i < fftSize; i++)
+                dataArrayCopy = dataArray[i];
+            // First try to fill the bins.
+            if (!freqBinBuffered)
+            {
+                freqBins[freqBinIndex][i] = dataArrayCopy;
+                freqBinIndex++;
+                if (freqBinIndex >= freqBinCount-1)
+                    freqBinBuffered = true;
+            }
+            else // Shift down and append
+            {
+                freqBins.shift();
+                freqBins.push(dataArrayCopy);
+            }
             
-            //console.log(start);
+
+
 
             if (start > buf.length-box_count)            
                 start = buf.length-box_count;
@@ -260,68 +299,47 @@
                 //console.log("reset")
             }
 
+            var fftDataDer = new Float32Array(box_count);
+            fftDataDer = dd(dataArray)
+
+            var scaledFFT = new Float32Array(box_count);
+            for (i = 0; i < box_count; i++) // Drop our FFT data into a scaled array
+            {
+                pos = (fftDataDer[i])/255 * 0.8 - 0.6;
+                scaledFFT[i] = pos;
+            }
+
+
+
+            // Some primitive analysis
             var avg = 0;
             var lowpass = 16;
             var lowPassLowerHz = 0;
             var lowPassUpperHz = fftSize/64/2; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
-            //for (i = fftOff; i < box_count/lowpass; i++)
-
-            var scaledFFT = new Float32Array(box_count);
-
             for (i = lowPassLowerHz; i < lowPassUpperHz; i++) // Sum our bandpass
-                avg += dataArray[i]; 
-            for (i = 0; i < box_count; i++)
-            {
-                pos = (dataArray[i])/255 * 0.8 - 0.6;
-                //fftboxes[i].position.y = pos;
-                scaledFFT[i] = pos;
-            }
+                avg += dataArray[i];
             avg /= lowPassUpperHz - lowPassLowerHz; // Final step to calculate average
-            avgavg[avgpos] = avg; // Drop in buffer of averages
-            var totalavg = 0;
-            if (avgpos < avglen)
-                avgpos++;
-            else // You tell me :P
-            {
-                avgpos = 0;
-                var tmpavg = 0;
-                for (let i = 0; i < avglen; i++)
-                    tmpavg = avgavg[i]
-                tmpavg /= avglen;
-                
-                totalavg = tmpavg;
-                
-                text = totalavg/pretotal*100
+        
+            if (avg > thresh)
+                size = avg/255;
+            else
+                size = 0.00001;
 
+            cube.scale.x = size;
+            cube.scale.y = size;
+            cube.scale.z = size;
 
-                var size = 0.001;
-                if (totalavg / pretotal - 1 > thresh)
-                {
-                    text = 'BEAT';
-                    size = totalavg/pretotal-1;
                     
-                }
-                cube.scale.x = size;
-                cube.scale.y = size;
-                cube.scale.z = size;
-
-                document.getElementById('info').innerHTML = text;
-
-
-                pretotal = totalavg;
-            }
-           
-            
             cube.position.x = 0.7;
             cube.position.y = -0.2;
 
-
+            document.getElementById('info').innerHTML = size;
 
             
             //updatePositions(box_count, line, 0.4, data, scalar = 0.2);
             updatePositions(box_count/fftDivisor, line, 0.4, scaledFFT, scalar = 0.4);
             //updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
-            updatePositions(box_count/fftDivisor, FFTline, -0.2, discreteDerivative(scaledFFT), scalar = 1);
+            updatePositions(box_count/fftDivisor, FFTline, -0.2, dd(scaledFFT), scalar = 1);
 
             rotateCube();
 
