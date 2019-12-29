@@ -1,4 +1,4 @@
-window.shaders = window.shaders || {};
+window.shaders = window.shaders || {}; // JS Boilerplate
 window.shaders.fragmentShader = `
 
 
@@ -11,6 +11,15 @@ uniform float scalePower;
 varying vec3 vUv;
 
 
+#define LIGHT_COUNT 10
+
+struct Light
+{
+	vec3 lightPos;
+	vec3 lightColour;
+	float lightIntensity;
+};
+
 /**
  * Part 2 Challenges
  * - Change the diffuse color of the sphere to be blue
@@ -19,10 +28,10 @@ varying vec3 vUv;
  * - Add a third light to the scene
  */
 
-//const int MAX_MARCHING_STEPS = 256;
+//const int MAX_MARCHING_STEPS = 128;
 const int MAX_MARCHING_STEPS = 512;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 100.0;
+const float MAX_DIST = 50.0;
 const float EPSILON = 0.0001;
 
 
@@ -116,11 +125,15 @@ float sphereSDF(vec3 samplePoint)
 }
 
 
+#define OBJECT_COUNT 2
 /**
  * Playing with translations
  */
 float fScene(vec3 pt) 
 {
+	float distances[OBJECT_COUNT];
+
+
 	// Scale 2x along X
 	vec3 scale = vec3(scalePower*2.0+1.0); // MUST BE >= 1
 	mat4 S = mat4(
@@ -154,13 +167,26 @@ float fScene(vec3 pt)
 
 	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
 
-	//return min(min(sphereSDF(new_pt), sdf_sphere(pt, vec3(3.0, 0.0, 1.0), 1.0)), sdf_sphere(pt, vec3(2.0, 0.0, 1.0), 1.0));
-	//return sdf_sphere(pt, vec3(0.0), 1.0);
-	return min(max(min(
+
+	/*
+	 * Construct our scene by setting up scene array
+	 */
+	// Our three balls
+	distances[0] = max(min(
 		sdf_sphere(pt, vec3(-0.5, 0.0, 1.0), 1.0), // Left Ball
 		sdf_sphere(pt, vec3(0.5, 0.0, 1.0), 1.0)), // Right Ball
-		-sdf_sphere(pt, vec3(0.0, -0.5, 1.5), 0.5)), // Intersection Ball
-		sdf_plane(pt, vec4(0.0, 1.0, 0.0, 0.6))); // Ground Plane/**/
+		-sdf_sphere(pt, vec3(0.0, -0.5, 1.5), 0.5)); // Intersection Ball
+
+	// Our ground
+	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 0.6)); // Ground Plane
+
+	// Calculate minimum over an array of points
+	float smallest_point = MAX_DIST+1.0;
+	for (int i = 0; i < OBJECT_COUNT; i++)
+		if (distances[i] < smallest_point)
+			smallest_point = distances[i];
+
+	return smallest_point; // Return the smallest point of all our objects
 }
 
 /**
@@ -274,9 +300,9 @@ vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
 	
 	vec3 col;
 
-	float SHADOW_FALLOFF = 10.0;
+	float SHADOW_FALLOFF = 5.0;
 	float shadow = 0.0;
-	float shadowRayCount = 1.0;
+	const float shadowRayCount = 2.0;
 	for (float s = 0.0; s < shadowRayCount; s++)
 	{
 		vec3 shadowRayOrigin = p + N * 0.01;
@@ -292,11 +318,14 @@ vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
 	// Light reflection in opposite direction as viewer, apply only diffuse
 	// component
 	if (dotRV < 0.0)
-		lightIntensity * (k_d * dotLN);
+		col = lightIntensity * (k_d * dotLN);
 	else
 		col = lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
 
-	return mix(col, col*0.2, shadow/shadowRayCount);
+	if (gl_FragCoord.x > iResolution.x/2.0)
+		return col;
+	else
+		return mix(col, col*0.2, shadow/shadowRayCount);
 }
 
 /**
@@ -366,7 +395,7 @@ float AmbientOcclusion(vec3 point, vec3 normal, float stepDistance)
 {
 	float occlusion = 1.0;
 	for (float samples = 10.0; samples > 0.0; samples--) 
-		occlusion -= (samples * stepDistance - (sceneSDF(point + normal * samples * stepDistance))) / pow(4.0, samples); // Set power for increased falloff
+		occlusion -= (samples * stepDistance - (sceneSDF(point + normal * samples * stepDistance))) / pow(4.0, samples); // Set higher power for increased falloff
 	return occlusion; 
 }
 
@@ -455,5 +484,29 @@ float ambientOcclusion( in vec3 p, in vec3 n, in float maxDist, in float falloff
 */
 
 
+vec3 softShadows(vec3 p, vec3 N, vec3 L)
+{
 
-`;
+
+	vec3 col;
+
+	float SHADOW_FALLOFF = 5.0;
+	float shadow = 0.0;
+	const float shadowRayCount = 2.0;
+	for (float s = 0.0; s < shadowRayCount; s++)
+	{
+		vec3 shadowRayOrigin = p + N * 0.01;
+		float r = rand(vec2(N.xy)) * 2.0 - 1.0;
+		vec3 shadowRayDir = L + vec3(1.0 * SHADOW_FALLOFF) * r;
+		float shadowRayIntersection = shortestDistanceToSurface(shadowRayOrigin, shadowRayDir, MIN_DIST, MAX_DIST);
+		if (shadowRayIntersection > 0.0)
+			shadow += 1.0;
+	}
+
+
+	return mix(col, col*0.2, shadow/shadowRayCount);
+}
+
+
+
+`; // For da JS
