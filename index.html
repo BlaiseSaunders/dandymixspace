@@ -11,14 +11,19 @@
     <script type="text/javascript" src="./pcm-player.js"></script>
     <script type="text/javascript" src="./three.js"></script>
     <script type="text/javascript" src="./OrbitControls.js"></script>
+    <script type="text/javascript" src="./shader.vert"></script>
+    <script type="text/javascript" src="./shader.frag"></script>
+    <!--script type="text/javascript" src="./require.js"></script-->
     <script>
+	//javascript:(function(){var script=document.createElement('script');script.onload=function(){var stats=new Stats();document.body.appendChild(stats.dom);requestAnimationFrame(function loop(){stats.update();requestAnimationFrame(loop)});};script.src='//mrdoob.github.io/stats.js/build/stats.min.js';document.head.appendChild(script);})()
+
 
         var camera, scene, renderer, controls;
         var mesh;
         window.data = []
-        var fftSize = 16384;
+	var fftSize = Math.pow(2, 10); // Must be power of 2, 32 <= x <= 2^15
         //var fftDivisor = 64;
-        var fftDivisor = 16;
+        var fftDivisor = 64; // must be pow of 2
         var box_count = fftSize/2; // Must be half FFT size
         window.box_count = box_count;
         var freqBinCount = 128;
@@ -53,7 +58,7 @@
 
             // line
             t_line = new THREE.Line(line_geometry,  material);
-            scene.add(t_line);
+            //scene.add(t_line);
 
             return t_line;
         }
@@ -79,11 +84,11 @@
 
             // Add in our pretty flashy cube :^)
             cube = new THREE.Mesh(new THREE.CubeGeometry(0.5, 0.5, 0.5), new THREE.MeshNormalMaterial());
-            scene.add(cube);
+            //scene.add(cube);
 
 
             //addExperimentalCube();
-            //geomTest();
+            geomTest();
 
 
             // Setup our renderer 
@@ -125,11 +130,12 @@
             return out;
         }
 
+
+	var screenMaterial;
+
         function geomTest()
         {   
             let tess = 32;
-
-
             let geometry = new THREE.Geometry();
             for (let y = 0; y < tess; y += 1)
             {
@@ -140,7 +146,6 @@
             }
 
             //geometry.faces.push(new THREE.Face3(0, tess, 1));
-
             for (let y = 0; y < tess-1; y += 1)
             {
                 let ry = y*tess;
@@ -155,27 +160,30 @@
             }
 
             let uniforms = {
-                colorB: {type: 'vec3', value: new THREE.Color(0xACB6E5)},
-                colorA: {type: 'vec3', value: new THREE.Color(0x74ebd5)}
+                colorB: {type: 'vec3', value: new THREE.Color(0x232323)},
+                colorA: {type: 'vec3', value: new THREE.Color(0x2c2c2c)},
+                iResolution: {type: 'vec2', value: new THREE.Vector2(1920, 1080)},
+                iTime: {type: 'float', value: 1.0 },
+                scalePower: {type: 'float', value: 1.0 },
             }
 
-            //geometry = new THREE.BoxGeometry(1, 1, 1);
-            let material =  new THREE.ShaderMaterial({
+            geometry = new THREE.BoxGeometry(2, 1, 1);
+            screenMaterial =  new THREE.ShaderMaterial({
                 uniforms: uniforms,
-                fragmentShader: fragmentShader(),
-                vertexShader: vertexShader(),
+                fragmentShader: window.shaders.fragmentShader,
+                vertexShader: window.shaders.vertexShader,
             })
 
-            let mesh = new THREE.Mesh(geometry, material);
-            mesh.position.x = -1;
-            mesh.position.z = -1;
-            mesh.position.y = -0.5;
-            let s = 2;
+	        let mesh = new THREE.Mesh(geometry, screenMaterial);
+            mesh.position.x = 0;
+            mesh.position.z = -3;
+            mesh.position.y = 0;
+            let s = 4;
             mesh.scale.x = s;
             mesh.scale.y = s;
             mesh.scale.z = s;
-            scene.add(mesh);
-            //sceneObjects.push(mesh);
+	        scene.add(mesh);
+		 screen = mesh;
 
         }
 
@@ -238,112 +246,122 @@
 
 
 
-        function animate() {
+	function animate() 
+	{
 
-            requestAnimationFrame(animate);
-
-
-            var player = window.pcm;
-            if (typeof player === "undefined" || typeof player.sources[player.current] === "undefined" ||
-                typeof player.sources[player.current].buffer === "undefined")
-            {
-                return;
-            }
-            if (typeof analyser === "undefined")
-            {
-                analyser = player.analyser;
-                bufferLength = analyser.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
-            }
-
-            
-            var buf = player.sources[player.current].buffer;
-            var data = new Float32Array(box_count);
-            var start = (Date.now()-startOff)*(44100/1000);
-
-            
-            analyser.getByteFrequencyData(dataArray);
+		requestAnimationFrame(animate);
 
 
-            /* 
-             * Store the data into our time series arrays after division 
-             */
-            var dataArrayCopy = new Float32Array(bufferLength);
-            for (var i = 0; i < fftSize; i++)
-                dataArrayCopy = dataArray[i];
-            // First try to fill the bins.
-            if (!freqBinBuffered)
-            {
-                freqBins[freqBinIndex][i] = dataArrayCopy;
-                freqBinIndex++;
-                if (freqBinIndex >= freqBinCount-1)
-                    freqBinBuffered = true;
-            }
-            else // Shift down and append
-            {
-                freqBins.shift();
-                freqBins.push(dataArrayCopy);
-            }
-            
+		
+
+		var player = window.pcm;
+		if (typeof player === "undefined" || typeof player.sources[player.current] === "undefined" ||
+			typeof player.sources[player.current].buffer === "undefined")
+		{
+			return;
+		}
+		if (typeof analyser === "undefined")
+		{
+			analyser = player.analyser;
+			bufferLength = analyser.frequencyBinCount;
+			dataArray = new Uint8Array(bufferLength);
+		}
+
+		
+		var buf = player.sources[player.current].buffer;
+		var data = new Float32Array(box_count);
+		var start = (Date.now()-startOff)*(44100/1000);
+
+		
+		analyser.getByteFrequencyData(dataArray);
 
 
-
-            if (start > buf.length-box_count)            
-                start = buf.length-box_count;
-            buf.copyFromChannel(data, 0, start);
-
-            if (player.reset)
-            {
-                startOff = Date.now();
-                player.reset = false;
-                //console.log("reset")
-            }
-
-            var fftDataDer = new Float32Array(box_count);
-            fftDataDer = dd(dataArray)
-
-            var scaledFFT = new Float32Array(box_count);
-            for (i = 0; i < box_count; i++) // Drop our FFT data into a scaled array
-            {
-                pos = (fftDataDer[i])/255 * 0.8 - 0.6;
-                scaledFFT[i] = pos;
-            }
+		/* 
+		* Store the data into our time series arrays after division 
+		*/
+		var dataArrayCopy = new Float32Array(bufferLength);
+		for (var i = 0; i < fftSize; i++)
+			dataArrayCopy = dataArray[i];
+		// First try to fill the bins.
+		if (!freqBinBuffered)
+		{
+			freqBins[freqBinIndex][i] = dataArrayCopy;
+			freqBinIndex++;
+			if (freqBinIndex >= freqBinCount-1)
+			freqBinBuffered = true;
+		}
+		else // Shift down and append
+		{
+			freqBins.shift();
+			freqBins.push(dataArrayCopy);
+		}
+		
 
 
 
-            // Some primitive analysis
-            var avg = 0;
-            var lowpass = 16;
-            var lowPassLowerHz = 0;
-            var lowPassUpperHz = fftSize/64/2; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
-            for (i = lowPassLowerHz; i < lowPassUpperHz; i++) // Sum our bandpass
-                avg += dataArray[i];
-            avg /= lowPassUpperHz - lowPassLowerHz; // Final step to calculate average
-        
-            if (avg > thresh)
-                size = avg/255;
-            else
-                size = 0.00001;
+		if (start > buf.length-box_count)            
+			start = buf.length-box_count;
+		buf.copyFromChannel(data, 0, start);
 
-            cube.scale.x = size;
-            cube.scale.y = size;
-            cube.scale.z = size;
+		if (player.reset)
+		{
+			startOff = Date.now();
+			player.reset = false;
+			//console.log("reset")
+		}
 
-                    
-            cube.position.x = 0.7;
-            cube.position.y = -0.2;
+		var fftDataDer = new Float32Array(box_count);
+		fftDataDer = dd(dataArray)
 
-            document.getElementById('info').innerHTML = size;
+		var scaledFFT = new Float32Array(box_count);
+		for (i = 0; i < box_count; i++) // Drop our FFT data into a scaled array
+		{
+			//pos = (fftDataDer[i])/255 * 0.8 - 0.6;
+			pos = (dataArray[i])/255 * 0.8 - 0.6;
+			scaledFFT[i] = pos;
+		}
 
-            
-            //updatePositions(box_count, line, 0.4, data, scalar = 0.2);
-            updatePositions(box_count/fftDivisor, line, 0.4, scaledFFT, scalar = 0.4);
-            //updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
-            updatePositions(box_count/fftDivisor, FFTline, -0.2, dd(scaledFFT), scalar = 1);
 
-            rotateCube();
 
-            renderer.render(scene, camera);
+		// Some primitive analysis
+		var avg = 0;
+		var lowpass = 16;
+		var lowPassLowerHz = 0;
+		var lowPassUpperHz = fftSize/64/2; // FFT Range is fftsize, assuming roughly ~= 0-2000Hz, calculate filter values from there
+		for (i = lowPassLowerHz; i < lowPassUpperHz; i++) // Sum our bandpass
+			avg += dataArray[i];
+		avg /= lowPassUpperHz - lowPassLowerHz; // Final step to calculate average
+		
+		if (avg > thresh)
+			size = avg/255;
+		else
+			size = 0.00001;
+
+
+		size = Math.log(size+1);
+
+		cube.scale.x = size;
+		cube.scale.y = size;
+		cube.scale.z = size;
+		screenMaterial.uniforms.iTime.value += size/10;
+		screenMaterial.uniforms.scalePower.value = size;
+
+			
+		cube.position.x = 0.7;
+		cube.position.y = -0.2;
+
+		//document.getElementById('info').innerHTML = size;
+		document.getElementById('info').innerHTML = '';
+
+		
+		//updatePositions(box_count, line, 0.4, data, scalar = 0.2);
+		updatePositions(box_count/fftDivisor, line, 0.4, scaledFFT, scalar = 0.4);
+		//updatePositions(box_count/fftDivisor, FFTline, 0.0, scaledFFT, scalar = 1);
+		updatePositions(box_count/fftDivisor, FFTline, -0.2, dd(scaledFFT), scalar = 1);
+
+		rotateCube();
+
+		renderer.render(scene, camera);
 
         }
         function handleError()
@@ -351,55 +369,70 @@
 
         }
 
-        window.onload = function() {
-        var socketURL = 'ws://localhost:8080';
-        var player = new PCMPlayer({
-                encoding: '16bitInt',
-                channels: 2,
-                sampleRate: 44100,
-                flushingTime: 1000
-            }, fftSize);
+	window.onload = function() 
+	{
+		var socketURL = 'ws://localhost:8080';
+		var player = new PCMPlayer({
+			encoding: '16bitInt',
+			channels: 2,
+			sampleRate: 44100,
+			flushingTime: 1000
+		}, fftSize);
 
-        var ws = new WebSocket(socketURL);
+		var ws = new WebSocket(socketURL);
 
-        ws.binaryType = 'arraybuffer';
-        ws.addEventListener('message',function(event) {
-            var data = new Uint16Array(event.data);
-            player.feed(data);
-            // Now FFT the data 
+		ws.binaryType = 'arraybuffer';
+		ws.addEventListener('message',function(event) {
+		var data = new Uint16Array(event.data);
+		player.feed(data);
+		// Now FFT the data 
 
-            });
+		});
         }  
 
+	function readShader (fileURL)
+	{
+		var rawFile = new XMLHttpRequest();
+		rawFile.open("GET", fileURL, false);
+		rawFile.onreadystatechange = function ()
+		{
+			if(rawFile.readyState === 4)
+				if(rawFile.status === 200 || rawFile.status == 0)
+				{
+					var allText = rawFile.responseText;
+					
+				}
 
-
-
+		}
+		rawFile.send(null);
+	}
+	
         function vertexShader() 
-        {
-            return `
-                varying vec3 vUv; 
+        {		
+		return `
+			varying vec3 vUv; 
 
-                void main() 
-                {
-                    vUv = position; 
+			void main() 
+			{
+				vUv = position; 
 
-                    vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
-                    gl_Position = projectionMatrix * modelViewPosition; 
-                }
-            `
+				vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+				gl_Position = projectionMatrix * modelViewPosition; 
+			}
+		`
         }
         function fragmentShader()
         {
-            return `
-                uniform vec3 colorA; 
-                uniform vec3 colorB; 
-                varying vec3 vUv;
+		return `
+			uniform vec3 colorA; 
+			uniform vec3 colorB; 
+			varying vec3 vUv;
 
-                void main() 
-                {
-                    gl_FragColor = vec4(mix(colorA, colorB, vUv.z), 1.0);
-                }
-            `
+			void main() 
+			{
+				gl_FragColor = vec4(mix(colorA, colorB, vUv.z), 1.0);
+			}
+		`
         }
     </script>
 

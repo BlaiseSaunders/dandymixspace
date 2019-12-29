@@ -8,8 +8,8 @@ function PCMPlayer(option, fftSize = 4096) {
 PCMPlayer.prototype.init = function(option) {
     var defaults = {
         encoding: '16bitInt',
-        channels: 1,
-        sampleRate: 8000,
+        channels: 2,
+        sampleRate: 44100,
         flushingTime: 1000
     };
     this.option = Object.assign({}, defaults, option);
@@ -54,7 +54,7 @@ PCMPlayer.prototype.createContext = function() {
     this.current = 0;
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = this.fftSize;
-    this.analyser.smoothingTimeConstant = 0.5;
+    this.analyser.smoothingTimeConstant = 0.0;
 
     window.pcm = this;
 };

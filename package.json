@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/DavidoRotho/dandymixspace#readme",
   "dependencies": {
+    "fft-js": "0.0.12",
     "uuid": "^3.3.2",
     "uuidv4": "^4.0.0",
     "wc": "0.0.1",
