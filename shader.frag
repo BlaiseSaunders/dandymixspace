@@ -168,6 +168,7 @@ float fScene(vec3 pt)
 	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
 
 
+	return min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)));
 	/*
 	 * Construct our scene by setting up scene array
 	 */
@@ -341,7 +342,7 @@ vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
  *
  * See https://en.wikipedia.org/wiki/Phong_reflection_model#Description
  */
-vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye) {
+vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_d_2, vec3 k_s, float alpha, vec3 p, vec3 eye) {
 	const vec3 ambientLight = 0.3 * vec3(1.0, 1.0, 1.0);
 	vec3 color = ambientLight * k_a;
 	
@@ -359,7 +360,7 @@ vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 e
 	                      2.0);
 	vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
 	
-	color += phongContribForLight(k_d, k_s, alpha, p, eye,
+	color += phongContribForLight(k_d_2, k_s, alpha, p, eye,
 					light2Pos,
 					light2Intensity);    
 	return color;
@@ -426,17 +427,18 @@ void main()
 	vec3 K_a = vec3(0.1, 0.7, 0.8); // Cyan
 	vec3 K_d = vec3(0.4, 0.6, 0.3); // Green
 	K_d = hsv2rgb(vec3(mod(0.6, 1.0), 1.0, 1.0)); // Green
-	//K_d = hsv2rgb(vec3(mod(scalePower, 1.0), 1.0, 1.0)); // Green
-	vec3 K_s = vec3(1.0, 1.0, 1.0);
+	K_d = hsv2rgb(vec3(mod(scalePower, 1.0), 1.0, 1.0)); // Green
+	vec3 K_d_2 = hsv2rgb(vec3(mod(-scalePower, 1.0), 1.0, 1.0)); // Green
+	vec3 K_s = vec3(0.3);
 	float shininess = 10.0;
 	
-	vec3 color = phongIllumination(K_a, K_d, K_s, shininess, p, eye);
+	vec3 color = phongIllumination(K_a, K_d, K_d_2, K_s, shininess, p, eye);
 
 	float ao;
 
 	ao = AmbientOcclusion(p, estimateNormal(p), 0.5);
 
-	color -= vec3(1.0-ao)*0.4;
+	color -= vec3(1.0-ao)*0.5;
 
 	//color *= (1.0-vec3(steps/MAX_MARCHING_STEPS))
 	
