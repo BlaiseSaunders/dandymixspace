@@ -28,7 +28,7 @@
         window.box_count = box_count;
         var freqBinCount = 128;
         var freqBins = [];
-        var freqBinDepth = 32;
+        var freqBinDepth = 16;
         var freqBinIndex = 0;
         var freqBinBuffered = false;
 
@@ -100,7 +100,7 @@
 
 
             for (var i = 0; i < this.freqBinCount; i++)
-                this.freqBins.push(new Float32Array(this.fftSize));
+                this.freqBins.push(new Float32Array(this.freqBinDepth));
 
 
             
@@ -164,7 +164,8 @@
                 colorA: {type: 'vec3', value: new THREE.Color(0x2c2c2c)},
                 iResolution: {type: 'vec2', value: new THREE.Vector2(1920, 1080)},
                 iTime: {type: 'float', value: 1.0 },
-                scalePower: {type: 'float', value: 1.0 },
+		scalePower: {type: 'float', value: 1.0 },
+		data: { type: "fv1", value:  freqBins[0] },
             }
 
             geometry = new THREE.BoxGeometry(2, 1, 1);
@@ -252,6 +253,7 @@
 		requestAnimationFrame(animate);
 
 
+		console.log(freqBins[0]);
 		
 
 		var player = window.pcm;
@@ -278,7 +280,7 @@
 
 		/* 
 		* Store the data into our time series arrays after division 
-		*/
+		*
 		var dataArrayCopy = new Float32Array(bufferLength);
 		for (var i = 0; i < fftSize; i++)
 			dataArrayCopy = dataArray[i];
@@ -294,7 +296,7 @@
 		{
 			freqBins.shift();
 			freqBins.push(dataArrayCopy);
-		}
+		}*/
 		
 
 
@@ -343,8 +345,33 @@
 		cube.scale.x = size;
 		cube.scale.y = size;
 		cube.scale.z = size;
+
+		freqBinIndex += 1;
+		if (freqBinIndex >= freqBinDepth)
+			freqBinIndex = 0;
+		freqBins[0][freqBinIndex] = size;
+
+
+		if(window.devicePixelRatio !== undefined)
+			dpr = window.devicePixelRatio;
+		else
+			dpr = 1;
+
+
+		size = Math.pow(4, size-1);
+
+		
+
+
 		screenMaterial.uniforms.iTime.value += size/10;
-		screenMaterial.uniforms.scalePower.value = size;
+		screenMaterial.uniforms.scalePower.value = size; // Higher number for steeper curve
+		let screenx = window.innerWidth * dpr;
+		let screeny = window.innerHeight * dpr;
+		screenMaterial.uniforms.iResolution.value = new THREE.Vector2(screenx, screeny);
+		screenMaterial.uniforms.data.value = freqBins[0];
+		
+
+		console.log("X: "+screenx+"; Y: "+screeny);
 
 			
 		cube.position.x = 0.7;

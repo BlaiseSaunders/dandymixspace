@@ -8,6 +8,7 @@ uniform vec3 colorB;
 uniform vec2 iResolution;
 uniform float iTime;
 uniform float scalePower;
+uniform float data[32];
 varying vec3 vUv;
 
 
@@ -20,19 +21,12 @@ struct Light
 	float lightIntensity;
 };
 
-/**
- * Part 2 Challenges
- * - Change the diffuse color of the sphere to be blue
- * - Change the specual color of the sphere to be green
- * - Make one of the lights pulse by having its intensity vary over time
- * - Add a third light to the scene
- */
-
 //const int MAX_MARCHING_STEPS = 128;
-const int MAX_MARCHING_STEPS = 512;
+const int MAX_MARCHING_STEPS = 1024;
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 50.0;
 const float EPSILON = 0.0001;
+
 
 
 // :^)
@@ -90,6 +84,17 @@ float sdf_plane(vec3 p, vec4 pos) // Ground plane
 }
 
 
+float vmax(vec3 v)
+{
+	return max(max(v.x, v.y), v.z);
+}
+
+float sdf_box(vec3 p, vec3 c, vec3 s)
+{
+	return vmax(abs(p-c) - s);
+}
+
+
 float sdf_box(vec3 p, vec3 b)
 {
 	vec3 q = abs(p) - b;
@@ -108,34 +113,19 @@ float opRep(vec3 p, vec3 c)
     return sdf_sphere(q, vec3(0.0, 0.0, 0.0), 1.0);
 }
 
-
-
-
-
-
-/**
- * Signed distance function for a sphere centered at the origin with radius 1.0;
- */
-float sphereSDF(vec3 samplePoint) 
+float repeat(float d, float domain)
 {
-	//return opRep(samplePoint, vec3(1.0));
-	return sdf_box(samplePoint, vec3(0.3));
-	//return sdf_sphere(samplePoint, vec3(0.1), 1.0);
-	//return length(samplePoint) - 1.0;
+    return mod(d, domain)-domain/2.0;
 }
 
 
-#define OBJECT_COUNT 2
 /**
  * Playing with translations
  */
-float fScene(vec3 pt) 
+vec3 translatePoint(vec3 pt) 
 {
-	float distances[OBJECT_COUNT];
 
-
-	// Scale 2x along X
-	vec3 scale = vec3(scalePower*2.0+1.0); // MUST BE >= 1
+	vec3 scale = vec3(scalePower*0.5+1.0); // MUST BE >= 1
 	mat4 S = mat4(
 	vec4(scale.x, 0, 0, 0),
 	vec4(0, scale.y, 0, 0),
@@ -167,29 +157,17 @@ float fScene(vec3 pt)
 
 	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
 
-
-	return min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)));
-	/*
-	 * Construct our scene by setting up scene array
-	 */
-	// Our three balls
-	distances[0] = max(min(
-		sdf_sphere(pt, vec3(-0.5, 0.0, 1.0), 1.0), // Left Ball
-		sdf_sphere(pt, vec3(0.5, 0.0, 1.0), 1.0)), // Right Ball
-		-sdf_sphere(pt, vec3(0.0, -0.5, 1.5), 0.5)); // Intersection Ball
-
-	// Our ground
-	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 0.6)); // Ground Plane
-
-	// Calculate minimum over an array of points
-	float smallest_point = MAX_DIST+1.0;
-	for (int i = 0; i < OBJECT_COUNT; i++)
-		if (distances[i] < smallest_point)
-			smallest_point = distances[i];
-
-	return smallest_point; // Return the smallest point of all our objects
+	return new_pt;
 }
 
+
+float opSmoothUnion(float d1, float d2, float k) 
+{
+    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0);
+    return mix(d2, d1, h) - k*h*(1.0-h); 
+}
+
+#define OBJECT_COUNT 16
 /**
  * Signed distance function describing the scene.
  * 
@@ -197,9 +175,49 @@ float fScene(vec3 pt)
  * Sign indicates whether the point is inside or outside the surface,
  * negative indicating inside.
  */
-float sceneSDF(vec3 samplePoint) 
+vec2 sceneSDF(vec3 samplePoint) 
 {
-	return fScene(samplePoint);
+	vec3 new_pt = translatePoint(samplePoint);
+	vec3 pt = samplePoint;
+	float distances[OBJECT_COUNT];
+
+	//return min(min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0))), sdf_plane(pt, vec4(0.0, 1.0, 1.0, 7.0)));
+	/*
+	 * Construct our scene by setting up scene array
+	 */
+	// Our three balls
+	distances[0] = max(
+				min(
+					sdf_box(new_pt, vec3(-0.5, 0.0, 1.0), vec3(scalePower*1.1)), // Left Ball
+					sdf_sphere(new_pt, vec3(0.5, 0.0, 1.0), scalePower)   // Right Ball
+				),
+				-sdf_sphere(new_pt, vec3(0.0, -0.5, 1.5), scalePower)  // Intersection Ball
+			);
+
+	// Our ground
+	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)); // Backing Plane, angled
+
+
+	for (int i = 2; i < OBJECT_COUNT; i++)
+	{
+		distances[i] = sdf_box(new_pt, vec3(sin(float(i)), (float(i)*1.0 - ((float(OBJECT_COUNT))/2.0)), cos(float(i))), vec3(data[i]*0.4));
+		//distances[i] = MAX_DIST+2.0;
+	}
+
+	//distances[2] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)); // Ground Plane
+
+	float smallest_i = -1.0;
+
+	// Calculate minimum over an array of points
+	float smallest_point = MAX_DIST+1.0;
+	for (int i = 0; i < OBJECT_COUNT; i++)
+		if (distances[i] < smallest_point)
+		{
+			smallest_point = distances[i];
+			smallest_i = float(i);
+		}
+
+	return vec2(smallest_point, smallest_i); // Return the smallest point of all our objects
 }
 
 /**
@@ -219,10 +237,10 @@ float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, f
 	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
 	{
 
-		float dist = sceneSDF(eye + depth * marchingDirection);
+		float dist = sceneSDF(eye + depth * marchingDirection).x;
 
 		if (dist < EPSILON)
-				return depth;
+			return depth;
 
 		depth += dist;
 
@@ -233,7 +251,68 @@ float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, f
 
 	return end;
 }
+float shadowMarch(vec3 eye, vec3 marchingDirection, float start, float end, float w) 
+{
+	float depth = start;
+	
+	float s = 1.0;
+
+	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
+	{
+
+		float dist = sceneSDF(eye + depth * marchingDirection).x;
+
+		s = min(s, 0.5 + 0.5 * dist / (w * float(i)));
+
+		if (s < EPSILON)
+			break;
+
+		depth += dist;
+
+		if (depth >= end)
+			break;
+	}
+
+    	s = max(s, 0.0);
+    	return s*s*(3.0-2.0*s); // smoothstep
+
+}
             
+
+/*
+float shadowMarch(vec3 eye, vec3 marchingDirection, float start, float end, float w) 
+{
+	float depth = start;
+	
+	float s = 1.0;
+	float ph = 1e20;
+
+	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
+	{
+
+		float dist = sceneSDF(eye + depth * marchingDirection).x;
+
+		if (dist < EPSILON)
+			break;
+
+
+        	float y = dist*dist/(2.0*ph);
+        	float d = sqrt(dist*dist-y*y)
+        	s = min(s, w * d / max(0.0, float(i) - y));
+
+		ph = dist;
+
+		depth += dist;
+
+		if (depth >= end)
+			break;
+	}
+
+    	//s = max(s, 0.0);
+    	//return s*s*(3.0-2.0*s); // smoothstep
+	return s;
+
+}
 
 /**
  * Return the normalized direction to march in from the eye point for a single pixel.
@@ -249,22 +328,24 @@ vec3 rayDirection(float fieldOfView, vec2 size, vec2 fragCoord)
 	return normalize(vec3(xy, -z));
 }
 
+
+
 /**
  * Using the gradient of the SDF, estimate the normal on the surface at point p.
  */
 vec3 estimateNormal(vec3 p) 
 {
 	return normalize(vec3(
-		sceneSDF(vec3(p.x + EPSILON, p.y, p.z)) - sceneSDF(vec3(p.x - EPSILON, p.y, p.z)),
-		sceneSDF(vec3(p.x, p.y + EPSILON, p.z)) - sceneSDF(vec3(p.x, p.y - EPSILON, p.z)),
-		sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)) - sceneSDF(vec3(p.x, p.y, p.z - EPSILON))
+		sceneSDF(vec3(p.x + EPSILON, p.y, p.z)).x - sceneSDF(vec3(p.x - EPSILON, p.y, p.z)).x,
+		sceneSDF(vec3(p.x, p.y + EPSILON, p.z)).x - sceneSDF(vec3(p.x, p.y - EPSILON, p.z)).x,
+		sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)).x - sceneSDF(vec3(p.x, p.y, p.z - EPSILON)).x
 	));
 }
 
 
 float rand(vec2 co)
 {
-	return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+	return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453);
 }
 
 
@@ -302,32 +383,40 @@ vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
 	vec3 col;
 
 	float SHADOW_FALLOFF = 5.0;
-	float shadow = 0.0;
-	const float shadowRayCount = 2.0;
-	for (float s = 0.0; s < shadowRayCount; s++)
-	{
-		vec3 shadowRayOrigin = p + N * 0.01;
-		float r = rand(vec2(N.xy)) * 2.0 - 1.0;
-		vec3 shadowRayDir = L + vec3(1.0 * SHADOW_FALLOFF) * r;
-		float shadowRayIntersection = shortestDistanceToSurface(shadowRayOrigin, shadowRayDir, MIN_DIST, MAX_DIST);
-		if (shadowRayIntersection < 0.0)
-			shadow += 1.0;
-	}
-
+	float shadow = shadowMarch(p + N * 0.01, normalize(lightPos) + vec3(1.0 * SHADOW_FALLOFF), MIN_DIST, MAX_DIST, 0.1);
 
 
 	// Light reflection in opposite direction as viewer, apply only diffuse
 	// component
 	if (dotRV < 0.0)
+	{
 		col = lightIntensity * (k_d * dotLN);
+		col = mix(col, col*0.8, 1.0-shadow);
+	}
 	else
 		col = lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
 
-	if (gl_FragCoord.x > iResolution.x/2.0)
-		return col;
-	else
-		return mix(col, col*0.2, shadow/shadowRayCount);
+	//return vec3(1.0-shadow);
+	return col;
 }
+
+/*
+	L = normalize(lightPos);
+	float SHADOW_FALLOFF = 5.0;
+	float shadow = 0.0;
+	const float shadowRayCount = 1.0;
+	for (float s = 0.0; s < shadowRayCount; s++)
+	{
+		vec3 shadowRayOrigin = p + N * 0.01;
+		float r = rand(vec2(N.xy)) * 2.0 - 1.0;
+		r = 1.0;
+		vec3 shadowRayDir = L + vec3(1.0 * SHADOW_FALLOFF) * r;
+		float shadowRayIntersection = shortestDistanceToSurface(shadowRayOrigin, shadowRayDir, MIN_DIST, MAX_DIST);
+		if (shadowRayIntersection < MAX_DIST)
+			shadow += 1.0;
+	}
+*/
+
 
 /**
  * Lighting via Phong illumination.
@@ -346,18 +435,20 @@ vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_d_2, vec3 k_s, float alpha, ve
 	const vec3 ambientLight = 0.3 * vec3(1.0, 1.0, 1.0);
 	vec3 color = ambientLight * k_a;
 	
-	vec3 light1Pos = vec3(4.0 * sin(iTime),
+	vec3 light1Pos = vec3(-4.0 * sin(iTime),
 				2.0,
-				4.0 * cos(iTime));
+				-4.0 * cos(iTime));
+	//light1Pos = vec3(1.0, 2.0, 4.0);
 	vec3 light1Intensity = vec3(0.4, 0.4, 0.4);
 	
 	color += phongContribForLight(k_d, k_s, alpha, p, eye,
 					light1Pos,
 					light1Intensity);
 	
-	vec3 light2Pos = vec3(2.0 * sin(0.37 * iTime),
-	                      2.0 * cos(0.37 * iTime),
+	vec3 light2Pos = vec3(-2.0 * sin(0.37 * iTime),
+	                      -2.0 * cos(0.37 * iTime),
 	                      2.0);
+	//light2Pos = vec3(1.0, 2.0, 4.0);
 	vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
 	
 	color += phongContribForLight(k_d_2, k_s, alpha, p, eye,
@@ -382,7 +473,7 @@ float ambientOcclusion(vec3 p)
 	float AO_STEP_SIZE = 0.05;
 	for (int i = 0; i < AO_STEPS; i++)
 	{
-		float dist = sceneSDF(p + depth * normie);
+		float dist = sceneSDF(p + depth * normie).x;
 		
 		depth += AO_STEP_SIZE;
 
@@ -396,7 +487,7 @@ float AmbientOcclusion(vec3 point, vec3 normal, float stepDistance)
 {
 	float occlusion = 1.0;
 	for (float samples = 10.0; samples > 0.0; samples--) 
-		occlusion -= (samples * stepDistance - (sceneSDF(point + normal * samples * stepDistance))) / pow(4.0, samples); // Set higher power for increased falloff
+		occlusion -= (samples * stepDistance - (sceneSDF(point + normal * samples * stepDistance).x)) / pow(4.0, samples); // Set higher power for increased falloff
 	return occlusion; 
 }
 
@@ -411,7 +502,7 @@ vec3 hsv2rgb(vec3 c)
 void main()
 {
 	vec3 dir = rayDirection(90.0, iResolution.xy, gl_FragCoord.xy);
-	vec3 eye = vec3(0.5, 0.5, 9.0);
+	vec3 eye = vec3(0.0, 0.0, 13.0);
 	float dist = shortestDistanceToSurface(eye, dir, MIN_DIST, MAX_DIST);
 	
 	if (dist > MAX_DIST - EPSILON) 
@@ -442,10 +533,34 @@ void main()
 
 	//color *= (1.0-vec3(steps/MAX_MARCHING_STEPS))
 	
+	//color = pow(color, vec3(0.4545)); // Gamma correction
+	
+	//color = smoothstep(0.0,1.0,color);
+	
 	gl_FragColor = vec4(color, 1.0);
 }
 
 //gl_FragColor = vec4(mix(colorA, colorB, vUv.z), 1.0);
+
+
+
+
+/**
+ * Signed distance function for a sphere centered at the origin with radius 1.0;
+ */
+float sphereSDF(vec3 samplePoint) 
+{
+	//return opRep(samplePoint, vec3(1.0));
+	return sdf_box(samplePoint, vec3(0.3));
+	//return sdf_sphere(samplePoint, vec3(0.1), 1.0);
+	//return length(samplePoint) - 1.0;
+}
+
+float sdf_blend(float d1, float d2, float a)
+{
+	return a * d1 + (1.0 - a) * d2;
+}
+
 
 
 /*
