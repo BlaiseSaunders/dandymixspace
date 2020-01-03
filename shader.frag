@@ -170,7 +170,7 @@ float opSmoothUnion(float d1, float d2, float k)
     return mix(d2, d1, h) - k*h*(1.0-h); 
 }
 
-#define OBJECT_COUNT 24
+#define OBJECT_COUNT 25
 /**
  * Signed distance function describing the scene.
  * 
@@ -198,7 +198,7 @@ vec2 sceneSDF(vec3 samplePoint)
 			);
 
 	// Our ground
-	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 4.0)); // Backing Plane, angled
+	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 7.0)); // Backing Plane, angled
 
 
 	float theta = 4.0;
@@ -209,7 +209,7 @@ vec2 sceneSDF(vec3 samplePoint)
 		//distances[i] = MAX_DIST+2.0;
 	}
 	radius *= 1.5;
-	for (int i = 14; i < 24; i++)
+	for (int i = 14; i < 25; i++)
 	{
 		distances[i] = sdf_box(pt, vec3(sin(float(i)*theta)*radius, cos(float(i)*theta)*radius, 1.0), vec3(data1[i-14]*0.9));
 		//distances[i] = MAX_DIST+2.0;
