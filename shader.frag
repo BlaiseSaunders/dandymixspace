@@ -9,6 +9,9 @@ uniform vec2 iResolution;
 uniform float iTime;
 uniform float scalePower;
 uniform float data[32];
+uniform float data1[32];
+uniform float data2[32];
+uniform float data3[32];
 varying vec3 vUv;
 
 
@@ -21,7 +24,7 @@ struct Light
 	float lightIntensity;
 };
 
-//const int MAX_MARCHING_STEPS = 128;
+//const int MAX_MARCHING_STEPS = 16;
 const int MAX_MARCHING_STEPS = 1024;
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 50.0;
@@ -167,7 +170,7 @@ float opSmoothUnion(float d1, float d2, float k)
     return mix(d2, d1, h) - k*h*(1.0-h); 
 }
 
-#define OBJECT_COUNT 16
+#define OBJECT_COUNT 24
 /**
  * Signed distance function describing the scene.
  * 
@@ -181,7 +184,7 @@ vec2 sceneSDF(vec3 samplePoint)
 	vec3 pt = samplePoint;
 	float distances[OBJECT_COUNT];
 
-	//return min(min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0))), sdf_plane(pt, vec4(0.0, 1.0, 1.0, 7.0)));
+	//return vec2(min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0))), 1.0);
 	/*
 	 * Construct our scene by setting up scene array
 	 */
@@ -195,12 +198,20 @@ vec2 sceneSDF(vec3 samplePoint)
 			);
 
 	// Our ground
-	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)); // Backing Plane, angled
+	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 4.0)); // Backing Plane, angled
 
 
-	for (int i = 2; i < OBJECT_COUNT; i++)
+	float theta = 4.0;
+	float radius = 3.0;
+	for (int i = 2; i < 14; i++)
 	{
-		distances[i] = sdf_box(new_pt, vec3(sin(float(i)), (float(i)*1.0 - ((float(OBJECT_COUNT))/2.0)), cos(float(i))), vec3(data[i]*0.4));
+		distances[i] = sdf_box(pt, vec3(sin(float(i)*theta)*radius, cos(float(i)*theta)*radius, 1.0), vec3(data[i-2]*0.9));
+		//distances[i] = MAX_DIST+2.0;
+	}
+	radius *= 1.5;
+	for (int i = 14; i < 24; i++)
+	{
+		distances[i] = sdf_box(pt, vec3(sin(float(i)*theta)*radius, cos(float(i)*theta)*radius, 1.0), vec3(data1[i-14]*0.9));
 		//distances[i] = MAX_DIST+2.0;
 	}
 
