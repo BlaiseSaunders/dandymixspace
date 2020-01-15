@@ -102,8 +102,9 @@ float sdf_box(vec3 p, vec3 b)
 {
 	vec3 q = abs(p) - b;
   	//float dist = sin(iTime*0.05)*3.0+2.0;
-	float dist = sin(scalePower)*7.0+1.0;
+	float dist = sin(scalePower)*10.0+1.0;
 	float newp = sin(dist*p.x) * sin(dist*p.y) * sin(dist*p.z);
+	newp = (sin(p.x) + 2.0 * sin(2.0*p.x)) + (cos(p.y) - 2.0 * cos(2.0*p.y)) + (-1.0 * sin(3.0*p.z));
 
 	return sdf_sphere(p, vec3(0.0), b.x)+newp;
 
@@ -170,7 +171,58 @@ float opSmoothUnion(float d1, float d2, float k)
     return mix(d2, d1, h) - k*h*(1.0-h); 
 }
 
-#define OBJECT_COUNT 25
+
+
+
+#define B_NUM_OBJ 3
+float letter_b(vec3 pt, vec3 scale)
+{
+	mat4 S = mat4(
+	vec4(scale.x, 0, 0, 0),
+	vec4(0, scale.y, 0, 0),
+	vec4(0, 0, scale.z, 0),
+	vec4(0, 0, 0, 1));
+	mat4 inv = inverse(S);
+	vec3 s_pt = (vec4(pt, 1) * inv).xyz;
+	float distances[B_NUM_OBJ];
+	distances[0] = sdf_box(pt, vec3(0.0), vec3(0.7, 1.95, 0.7)*scale);
+	distances[1] = sdf_sphere(s_pt, vec3(1.0, -1.0, 0.0), 1.2);
+	distances[2] = sdf_sphere(s_pt, vec3(1.0, 1.0, 0.0), 1.2);
+	// Calculate minimum over an array of points
+	float smallest_point = MAX_DIST+1.0;
+	for (int i = 0; i < B_NUM_OBJ; i++)
+		if (distances[i] < smallest_point)
+			smallest_point = distances[i];
+	scale = vec3(1.2, 1.0, 2.0);
+	S = mat4(
+	vec4(scale.x, 0, 0, 0),
+	vec4(0, scale.y, 0, 0),
+	vec4(0, 0, scale.z, 0),
+	vec4(0, 0, 0, 1));
+	inv = inverse(S);
+	vec3 new_pt = (vec4(s_pt, 1) * inv).xyz;
+	smallest_point = max(smallest_point, -sdf_sphere(new_pt, vec3(0.7, -1.0, 0.0), 1.0));
+	smallest_point = max(smallest_point, -sdf_sphere(new_pt, vec3(0.7, 1.0, 0.0), 1.0));
+	return smallest_point; // Return the smallest point of all our objects
+}
+
+#define L_NUM_OBJ 2
+float letter_l(vec3 pt, vec3 scale)
+{
+	float distances[L_NUM_OBJ];
+	distances[0] = sdf_box(pt, vec3(-1.0, 0, 0.0), vec3(0.7, 2.0, 0.7)*scale);
+	distances[1] = sdf_box(pt, vec3(-0.2, -0.65, 0.0), vec3(1.3, 0.7, 0.7)*scale);
+	// Calculate minimum over an array of points
+	float smallest_point = MAX_DIST+1.0;
+	for (int i = 0; i < L_NUM_OBJ; i++)
+		if (distances[i] < smallest_point)
+			smallest_point = distances[i];
+
+	return smallest_point; // Return the smallest point of all our objects
+}
+
+
+#define OBJECT_COUNT 2
 /**
  * Signed distance function describing the scene.
  * 
@@ -184,12 +236,12 @@ vec2 sceneSDF(vec3 samplePoint)
 	vec3 pt = samplePoint;
 	float distances[OBJECT_COUNT];
 
-	//return vec2(min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0))), 1.0);
+	return vec2(min(sdf_box(new_pt, vec3(0.3)), sdf_plane(pt, vec4(0.0, 1.0, 0.0, 10.0))), 1.0);
 	/*
 	 * Construct our scene by setting up scene array
 	 */
 	// Our three balls
-	distances[0] = max(
+	/*distances[0] = max(
 				min(
 					sdf_box(new_pt, vec3(-0.5, 0.0, 1.0), vec3(scalePower*1.1)), // Left Ball
 					sdf_sphere(new_pt, vec3(0.5, 0.0, 1.0), scalePower)   // Right Ball
@@ -198,10 +250,18 @@ vec2 sceneSDF(vec3 samplePoint)
 			);
 
 	// Our ground
-	distances[1] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 7.0)); // Backing Plane, angled
+	(*/
+	
+
+	distances[0] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 7.0)); // Backing Plane, angled
+	//distances[1] = letter_b(pt, vec3(0.5));
+	//distances[1] = sdf_box();
+	//distances[2] = letter_l(pt, vec3(0.5));
+	
+	
 
 
-	float theta = 4.0;
+	/*float theta = 4.0;
 	float radius = 3.0;
 	for (int i = 2; i < 14; i++)
 	{
@@ -213,7 +273,7 @@ vec2 sceneSDF(vec3 samplePoint)
 	{
 		distances[i] = sdf_box(pt, vec3(sin(float(i)*theta)*radius, cos(float(i)*theta)*radius, 1.0), vec3(data1[i-14]*0.9));
 		//distances[i] = MAX_DIST+2.0;
-	}
+	}*/
 
 	//distances[2] = sdf_plane(pt, vec4(0.0, 1.0, 0.0, 3.0)); // Ground Plane
 
@@ -360,22 +420,6 @@ float rand(vec2 co)
 }
 
 
-/**
- * Lighting contribution of a single point light source via Phong illumination.
- * 
- * The vec3 returned is the RGB color of the light's contribution.
- *
- * k_a: Ambient color
- * k_d: Diffuse color
- * k_s: Specular color
- * alpha: Shininess coefficient
- * p: position of point being lit
- * eye: the position of the camera
- * lightPos: the position of the light
- * lightIntensity: color/intensity of the light
- *
- * See https://en.wikipedia.org/wiki/Phong_reflection_model#Description
- */
 vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
                           vec3 lightPos, vec3 lightIntensity) 
 {
@@ -513,7 +557,7 @@ vec3 hsv2rgb(vec3 c)
 void main()
 {
 	vec3 dir = rayDirection(90.0, iResolution.xy, gl_FragCoord.xy);
-	vec3 eye = vec3(0.0, 0.0, 13.0);
+	vec3 eye = vec3(0.0, 0.0, 16.0);
 	float dist = shortestDistanceToSurface(eye, dir, MIN_DIST, MAX_DIST);
 	
 	if (dist > MAX_DIST - EPSILON) 
@@ -530,7 +574,7 @@ void main()
 	vec3 K_d = vec3(0.4, 0.6, 0.3); // Green
 	K_d = hsv2rgb(vec3(mod(0.6, 1.0), 1.0, 1.0)); // Green
 	K_d = hsv2rgb(vec3(mod(scalePower, 1.0), 1.0, 1.0)); // Green
-	vec3 K_d_2 = hsv2rgb(vec3(mod(-scalePower, 1.0), 1.0, 1.0)); // Green
+	vec3 K_d_2 = hsv2rgb(vec3(mod(-scalePower, 1.0), 1.0, 1.0)); // Green // N.B: Not green, comments need updating but I forgot what this does
 	vec3 K_s = vec3(0.3);
 	float shininess = 10.0;
 	
