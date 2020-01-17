@@ -10,12 +10,13 @@ window.shaders.fragmentShader = `
  *
  */
 
-#define LIGHT_COUNT 1
+#define LIGHT_COUNT 2
 struct Light
 {
 	vec3 pos;
 	vec3 colour;
 	float intens;
+	float dist;
 };
 
 uniform float fieldOfView; 
@@ -25,13 +26,13 @@ uniform vec2 iResolution;
 uniform float iTime;
 uniform float scalePower;
 
-uniform Light lights[1];
+uniform Light lights[LIGHT_COUNT];
 
 varying vec3 vUv;
 
 
 //const int MAX_MARCHING_STEPS = 16;
-const int MAX_MARCHING_STEPS = 1024;
+const int MAX_MARCHING_STEPS = 256;
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 50.0;
 const float EPSILON = 0.0001;
@@ -188,14 +189,52 @@ float sdf_box(vec3 pos, vec3 dim)
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
+#define FRACTAL_STEPS 1
+float sdf_fractal(vec3 pos)
+{
+	float Scale = 0.1;
+
+	vec3 z = pos;
+	vec3 a1 = vec3(1,1,1);
+	vec3 a2 = vec3(-1,-1,1);
+	vec3 a3 = vec3(1,-1,-1);
+	vec3 a4 = vec3(-1,1,-1);
+	vec3 c;
+	float dist, d;
+	for (int n = 0; n < FRACTAL_STEPS; n++) 
+	{
+		c = a1; dist = length(z-a1);
+		d = length(z-a2); if (d < dist) { c = a2; dist=d; }
+		d = length(z-a3); if (d < dist) { c = a3; dist=d; }
+		d = length(z-a4); if (d < dist) { c = a4; dist=d; }
+		z = Scale*z-c*(Scale-1.0);
+	}
+
+	return length(z) * pow(Scale, float(-FRACTAL_STEPS));
+}
+
+
+
 
 float sdf_abstract(vec3 pos)
 {
-	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
-	boxpt = rotate_x_point(pos, 1.0);
-	float box = sdf_box(boxpt, vec3(0.8));
+	vec3 z = pos;
+	if(z.x+z.y < 0.0) z.xy = -z.yx; // fold 1
+	if(z.x+z.z < 0.0) z.xz = -z.zx; // fold 2
+	if(z.y+z.z < 0.0) z.zy = -z.yz; // fold 3
+	pos = z;
 
-	return min(sdf_sphere(pos, 1.0), box);
+	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
+	boxpt = rotate_x_point(pos, sin(iTime));
+	vec3 c = vec3(4.0);
+	boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
+	//boxpt = pos - c * clamp(pos / c, -l , l);
+
+	float box = sdf_box(boxpt, vec3(0.7));
+
+
+	//return min(sdf_sphere(pos, 1.0), box);
+	return box;
 }
 
 
@@ -208,6 +247,7 @@ vec2 sdf_scene(vec3 pos)
 {
 	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 2.0)); // Our floor
 	distances[1] = sdf_abstract(pos); // Abstract shape
+	//distances[1] = sdf_fractal(pos); // Abstract shape
 
 	// Calculate minimum over an array of points
 	float smallest_i = -1.0;
@@ -268,18 +308,48 @@ vec3 estimateNormal(vec3 p)
 }
 
 
-vec3 ambientContribution(float id)
+vec3 phongContribution(vec3 p, vec3 eye, float id)
 {
-	return hsv2rgb(vec3(id/2.0, 1.0, 1.0));
-}
+	vec3 normal = estimateNormal(p); // N
+	vec3 incidentVec = normalize(eye - p); // Normalize from origin (our eye) // V
 
-vec3 diffuseContribution(vec3 p, vec3 eye, float id)
-{
-	vec3 normal = estimateNormal(p);
-	vec3 incidentVec = normalize(eye - p); // Normalize from origin (our eye)
+	float shininess = 0.0001;
+	float specInf = 0.005;
+	float diffInf = 0.5;
+	float ambInf = 0.01;
+
+	vec3 outCol = vec3(0.0);
+
+	for (int i = 0; i < LIGHT_COUNT; i++)
+	{
+		float diff = 0.0;
+		float spec = 0.0;
+		vec3 amb = vec3(0.0);
+
+		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
+		// TESTING CODE //vec3 lightVec = normalize(vec3(2.0, 4.0, -2.0) - p); // Vector to light // L
+		vec3 reflectVec = normalize(reflect(-lightVec, normal));
+		
+		amb = lights[i].colour*ambInf; // Calculate ambient contribution
+
+		// Calculate diffuse component
+		diff += max(dot(lightVec, normal), 0.0);
+
+		// Calculate specular component
+		float specAngle = max(dot(reflectVec, incidentVec), 0.0);
+		spec += pow(specAngle, shininess/4.0) * specInf;
+
+		// Scale diff by distance from light // FAILED ATTEMPT AT LIGHTING FALLOFF
+		/*float scalar = (distance(lights[i].pos, p)/lights[i].dist);
+		spec -= spec*scalar;
+		diff -= diff*scalar;
+		amb -= amb*scalar;*/
 
 
-	return vec3(0.0);
+		outCol += ((diff + spec)*lights[i].colour)+ amb;
+	}
+
+	return outCol;
 }
 
 
@@ -291,7 +361,7 @@ vec3 diffuseContribution(vec3 p, vec3 eye, float id)
  * along by a fixed width, tracking how long it would take with proper ray marching,
  * then divide the two variables
  */
-#define AO_STEPS 10
+#define AO_STEPS 8
 float ambientOcclusion(vec3 pt, float marchStepSize)
 {
 	float depth = marchStepSize; // Start a little way off the object
@@ -311,7 +381,26 @@ float ambientOcclusion(vec3 pt, float marchStepSize)
 }
 
 
-float ambientOcclusionStrength = 3.0;
+#define SHADOW_FALLOFF 0.01
+float calculateShadow(vec3 p)
+{
+	float shadowStrength = 0.0;
+	vec3 N = estimateNormal(p);
+
+	for (int i = 0; i < LIGHT_COUNT; i++)
+	{
+		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
+
+		float dist = getDistToScene(p + N * 0.01, normalize(lights[i].pos) + vec3(1.0 * SHADOW_FALLOFF), MIN_DIST, MAX_DIST).x;
+
+		if (dist < distance(p, lights[i].pos))
+			shadowStrength += 1.0/float(LIGHT_COUNT);
+
+	}
+	return shadowStrength;
+}
+
+float ambientOcclusionStrength = 0.5;
 
 // You tell me :^)
 void main()
@@ -335,14 +424,19 @@ void main()
 	// The point our view ray hit
 	vec3 hitPos = eye + dist * dir;
 
-	vec3 color = hsv2rgb(vec3(0.1, 1.0, 1.0));
+	//vec3 color = hsv2rgb(vec3(0.1, 1.0, 1.0));
+	vec3 color = vec3(0.0);
 	//color = hsv2rgb(vec3(dist/(MAX_DIST/32.0), 1.0, 1.0));
 
-	color += ambientContribution(id);
-	//color += diffuseContribution(hitPos, id);
+	color += phongContribution(hitPos, eye, id);
 
 
-	color -= vec3(ambientOcclusion(hitPos, 0.06))*ambientOcclusionStrength;
+	color -= vec3(ambientOcclusion(hitPos, 0.006))*ambientOcclusionStrength;
+
+	color -= vec3(calculateShadow(hitPos))*0.1;
+
+	// Attenuate to the distance (fog)
+	color -= dist/MAX_DIST;
 
 	gl_FragColor = vec4(color, 1.0);
 }

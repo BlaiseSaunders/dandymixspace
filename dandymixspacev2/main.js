@@ -39,6 +39,28 @@ function init()
 function createTracerSurface()
 {   
 	let geometry = new THREE.Geometry();
+	
+	var lightdef1 = 
+	{
+		pos: new THREE.Vector3(4.0, 1.0, 5.0),
+		colour: new THREE.Vector3(0.8, 1.0, 0.1),
+		intens: 1.0,
+		dist: 1.0
+	}
+	var lightdef2 = 
+	{
+		pos: new THREE.Vector3(-4.0, 5.0, -5.0),
+		colour: new THREE.Vector3(1.0, 0.1, 0.1),
+		intens: 1.0,
+		dist: 1.0
+	}
+	var lightdef3 = 
+	{
+		pos: new THREE.Vector3(-1.0, 10.0, -7.0),
+		colour: new THREE.Vector3(0.1, 0.1, 1.0),
+		intens: 1.0,
+		dist: 1.0
+	}
 
 
 	let uniforms = 
@@ -50,9 +72,7 @@ function createTracerSurface()
 		scalePower: {type: 'float', value: 1.0 },
 		fieldOfView: {type: 'float', value: 100.0 },
 		eye: {type: 'vec3', value: new THREE.Vector3(window.x, window.y, window.z)},
-		"lights[0].pos": { type: "vec3", value: new THREE.Vector3(0.0, 1.0, -1.0) },
-		"lights[0].colour": { type: "vec3", value: new THREE.Vector3(0.8, 0.8, 0.1) },
-		"lights[0].intens": { type: "float", value: 1.0 },
+		lights: {value: [ lightdef1, lightdef2, lightdef3 ] }, 
 		eyeY: {type: 'float', value: 0.0 },
 	}
 
