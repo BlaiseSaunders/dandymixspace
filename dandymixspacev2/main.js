@@ -5,6 +5,7 @@ var screen; // Our ray tracer surface
 init();
 animate();
 
+
 function init() 
 {
 	console.log("Initializing DandyDance Web :^)...")
@@ -45,7 +46,6 @@ function init()
 
 	console.log("Initialized DandyDance Web :^)")
 }
-
 
 
 function createTracerSurface()
@@ -117,6 +117,7 @@ function createTracerSurface()
 	screen = mesh;
 }
 
+
 // This comment left as an exercise for the reader :^)
 function onWindowResize() 
 {
@@ -124,8 +125,6 @@ function onWindowResize()
 	camera.updateProjectionMatrix();
 	renderer.setSize(window.innerWidth, window.innerHeight);
 }
-
-
 
 
 function animate() 

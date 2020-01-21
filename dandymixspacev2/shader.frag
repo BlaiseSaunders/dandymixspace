@@ -5,12 +5,12 @@ window.shaders.fragmentShader = `
 /*
  *
  * Some implementation specifics:
- * 	- Scene returns vec2, x is dist, y is the ID of the object where ID > 0
+ * 	- Scene returns vec3, x is dist, y is the ID of the object where ID > 0 and z is steps
  *	- Dist functions nicked from Inigo Quilez (all hail)
  *
  */
 
-#define LIGHT_COUNT 2
+#define LIGHT_COUNT 2 // UPDATE OBJECT COUNT TOO
 struct Light
 {
 	vec3 pos;
@@ -276,7 +276,12 @@ float sdf_abstract(vec3 pos)
 /*
  * Scene generation function
  */
-#define OBJECT_COUNT 7
+
+float lightSize = 0.1;
+
+// Add light count
+#define NON_LIGHT_OBJECT_COUNT 7
+#define OBJECT_COUNT 9 // Manually add for amount of lights
 float distances[OBJECT_COUNT];
 vec2 sdf_scene(vec3 pos)
 {
@@ -288,6 +293,10 @@ vec2 sdf_scene(vec3 pos)
 	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 10.0)); // Roof
 	distances[6] = sdf_abstract(pos); // Abstract shape
 	//distances[1] = sdf_fractal(pos); // Abstract shape
+
+	// Add in the lights
+	for (int i = 0; i < LIGHT_COUNT; i++)
+		distances[NON_LIGHT_OBJECT_COUNT+i] = sdf_sphere(translate_point(pos, lights[i].pos), lightSize);
 
 	// Calculate minimum over an array of points
 	float smallest_i = -1.0;
@@ -306,25 +315,28 @@ vec2 sdf_scene(vec3 pos)
 /*
  * Ray Marching core functions live here
  */
-vec2 getDistToScene(vec3 eye, vec3 marchDir, float start, float end) 
+vec3 getDistToScene(vec3 viewer, vec3 marchDir, float start, float end) 
 {
 	float depth = start;
+	int steps = 0;
 	
 	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
 	{
-		vec2 dist = sdf_scene(eye + depth * marchDir);
+		vec2 dist = sdf_scene(viewer + depth * marchDir);
 
 		if (dist.x < EPSILON) // We hit something! (or close enough lol)
-			return vec2(depth, dist.y);
+			return vec3(depth, dist.y, float(i));
 
 		depth += dist.x;
 
 		if (depth >= end) // Marched to the end, didn't hit anything
-			return vec2(end, -1.0);
+			return vec3(end, -1.0, float(i));
+		
+		steps = i;
 	}
 
 
-	return vec2(end, -1.0);
+	return vec3(end, -1.0, float(steps));
 }
 
 // Get a ray direction based off of the pixel coordinate
@@ -349,10 +361,10 @@ vec3 estimateNormal(vec3 p)
 
 
 // Calculate standard phong lighting for all lights and return a colour contribution
-vec3 phongContribution(vec3 p, vec3 eye, float id)
+vec3 phongContribution(vec3 p, vec3 viewer, float id)
 {
 	vec3 normal = estimateNormal(p); // N
-	vec3 incidentVec = normalize(eye - p); // Normalize from origin (our eye) // V
+	vec3 incidentVec = normalize(viewer - p); // Normalize from origin (our viewer) // V
 
 	float shininess = 0.0001;
 	//float specInf = 0.005;
@@ -428,7 +440,7 @@ float ambientOcclusion(vec3 pt, float marchStepSize)
  * Standard marching code, except looking for the nearest spot we graze on the scene
  * for penumbra puproses
  */
-vec2 shadowCheck(vec3 eye, vec3 marchDir, float start, float end) 
+vec2 shadowCheck(vec3 viewer, vec3 marchDir, float start, float end) 
 {
 	float depth = start;
 	
@@ -437,7 +449,7 @@ vec2 shadowCheck(vec3 eye, vec3 marchDir, float start, float end)
 
 	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
 	{
-		vec2 dist = sdf_scene(eye + depth * marchDir);
+		vec2 dist = sdf_scene(viewer + depth * marchDir);
 		
 		if (dist.x < nearestHit)
 			nearestHit = dist.x;
@@ -497,6 +509,19 @@ float fogStrength = 0.1;
 //float ambientStepSize = 0.1;
 float ambientStepSize = 0.01;
 
+vec3 getColour(vec3 hitPos, vec3 viewer, float id)
+{
+	vec3 color = vec3(0.0);
+	color += phongContribution(hitPos, viewer, id);
+
+	color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
+
+	color -= vec3(calculateShadow(hitPos))*shadowStrength;
+
+	return color;
+}
+
+
 
 // You tell me :^)
 void main()
@@ -506,19 +531,58 @@ void main()
 
 	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist
 	// ID of the object we've hit (if any)
-	vec2 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
+	vec3 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
 	float dist = hit.x;
 	float id = hit.y;
-	
+	float steps = hit.z;
+
 	// Check to make sure we hit something
 	if (hit.y == -1.0) 
 	{
 		gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
 		return;
 	}
-	
+
 	// The point our view ray hit
 	vec3 hitPos = eye + dist * dir;
+
+	vec3 prevPoint = eye;
+
+	#define BOUNCE_COUNT 2
+	// Glossy testing, check next bounce
+	if (id == float(NON_LIGHT_OBJECT_COUNT-1))
+	{
+		for (int i = 0; i < BOUNCE_COUNT; i++)
+		{
+			vec3 normal = estimateNormal(hitPos); // N
+			vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
+
+			vec3 bounceAngle = normalize(reflect(incidentVec, normal));
+			vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle, MIN_DIST, MAX_DIST);
+			float bounceDist = bounceHit.x;
+			float bounceId = bounceHit.y;
+			float bounceSteps = bounceHit.z;
+
+			vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
+
+			vec3 bounceColor = getColour(bounceHitPos, hitPos, bounceId);
+
+			//gl_FragColor = vec4(hsv2rgb(vec3(bounceId/float(OBJECT_COUNT), 1.0, 1.0)), 1.0);
+			gl_FragColor = vec4(bounceColor, 1.0);
+			//gl_FragColor = vec4(vec3(bounceSteps/float(MAX_MARCHING_STEPS/4)), 1.0);
+			prevPoint = hitPos;
+			hitPos = bounceHitPos;
+		}
+		return;
+	}
+
+	if (id >= float(NON_LIGHT_OBJECT_COUNT))
+		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
+			if (i == int(id)-NON_LIGHT_OBJECT_COUNT)
+			{
+				gl_FragColor = vec4(lights[i].colour, 1.0);
+				return;
+			}
 
 	//vec3 color = hsv2rgb(vec3(0.1, 1.0, 1.0));
 	vec3 color = vec3(0.0);
@@ -529,15 +593,10 @@ void main()
 	else if (ambientWorld == 1)
 		color = vec3(ambientOcclusion(hitPos, ambientStepSize));
 	else if (distWorld == 1)
-		color = vec3(dist/MAX_DIST);
+		color = vec3(steps/float(MAX_MARCHING_STEPS))*1.0;
 	else // Otherewise render scene normally
 	{
-		color += phongContribution(hitPos, eye, id);
-
-		color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
-
-		color -= vec3(calculateShadow(hitPos))*shadowStrength;
-		
+		color = getColour(hitPos, eye, id);
 		// Attenuate to the distance (fog)
 		color -= dist/MAX_DIST*fogStrength;
 	}
