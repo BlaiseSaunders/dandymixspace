@@ -22,9 +22,16 @@ struct Light
 uniform float fieldOfView; 
 uniform vec3 eye;
 uniform float eyeY;
+uniform float eyeX;
 uniform vec2 iResolution;
 uniform float iTime;
 uniform float scalePower;
+
+uniform int shadowWorld;
+uniform int ambientWorld;
+uniform int distWorld;
+
+uniform float slider;
 
 uniform Light lights[LIGHT_COUNT];
 
@@ -34,7 +41,7 @@ varying vec3 vUv;
 //const int MAX_MARCHING_STEPS = 16;
 const int MAX_MARCHING_STEPS = 256;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 50.0;
+const float MAX_DIST = 60.0;
 const float EPSILON = 0.0001;
 
 
@@ -153,7 +160,24 @@ vec3 rotate_y_point(vec3 pt, float t)
 	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
 	return new_pt;
 }
+vec3 rotate_y_x_point(vec3 pt, float x, float y) // TODO: Optimize
+{
+	mat4 Rx = mat4(
+	vec4(1, 0, 0, 0),
+	vec4(0, cos(x), -sin(x), 0),
+	vec4(0, sin(x), cos(x), 0),
+	vec4(0, 0, 0, 1));
 
+	mat4 Ry = mat4(
+	vec4(cos(y), 0, sin(y), 0),
+	vec4(0, 1, 0, 0),
+	vec4(-sin(y), 0, cos(y), 0),
+	vec4(0, 0, 0, 1));
+
+	mat4 inv = inverse(Ry*Rx);
+	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
+	return new_pt;	
+}
 
 vec3 translate_point(vec3 pt, vec3 trans) 
 {
@@ -167,6 +191,16 @@ vec3 translate_point(vec3 pt, vec3 trans)
 	mat4 inv = inverse(T);
 	vec3 new_pt = (vec4(pt, 1) * inv).xyz;
 	return new_pt;
+}
+
+
+vec3 twist_point(vec3 p, float k)
+{
+    float c = cos(k*p.y);
+    float s = sin(k*p.y);
+    mat2  m = mat2(c,-s,s,c);
+    vec3  q = vec3(m*p.xz,p.y);
+    return q;
 }
 
 
@@ -224,10 +258,11 @@ float sdf_abstract(vec3 pos)
 	if(z.y+z.z < 0.0) z.zy = -z.yz; // fold 3
 	pos = z;
 
+
 	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
-	boxpt = rotate_x_point(pos, sin(iTime));
+	//boxpt = rotate_x_point(pos, sin(iTime));
 	vec3 c = vec3(4.0);
-	boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
+	//boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
 	//boxpt = pos - c * clamp(pos / c, -l , l);
 
 	float box = sdf_box(boxpt, vec3(0.7));
@@ -241,12 +276,17 @@ float sdf_abstract(vec3 pos)
 /*
  * Scene generation function
  */
-#define OBJECT_COUNT 2
+#define OBJECT_COUNT 7
 float distances[OBJECT_COUNT];
 vec2 sdf_scene(vec3 pos)
 {
-	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 2.0)); // Our floor
-	distances[1] = sdf_abstract(pos); // Abstract shape
+	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 4.0)); // Our floor
+	distances[1] = sdf_plane(pos, vec4(0.0, 0.0, 1.0, 10.0)); // Backing plane
+	distances[2] = sdf_plane(pos, vec4(1.0, 0.0, 0.0, 10.0)); // Backing plane
+	distances[3] = sdf_plane(pos, vec4(-1.0, 0.0, 0.0, 10.0)); // Backing plane
+	distances[4] = sdf_plane(pos, vec4(0.0, -1.0, 0.0, 10.0)); // Backing plane
+	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 10.0)); // Roof
+	distances[6] = sdf_abstract(pos); // Abstract shape
 	//distances[1] = sdf_fractal(pos); // Abstract shape
 
 	// Calculate minimum over an array of points
@@ -292,7 +332,7 @@ vec3 rayDirection(float fov, vec2 size, vec2 fragCoord, vec3 rot)
 {
 	vec2 xy = fragCoord - size / 2.0; // Normalize coordinates
 	float z = size.y / tan(radians(fov) / 2.0);
-	return rotate_y_point(normalize(vec3(xy, -z)), rot.y);
+	return rotate_y_x_point(normalize(vec3(xy, -z)), rot.x, rot.y); // TODO: Have it not be shit
 }
 
 
@@ -308,13 +348,15 @@ vec3 estimateNormal(vec3 p)
 }
 
 
+// Calculate standard phong lighting for all lights and return a colour contribution
 vec3 phongContribution(vec3 p, vec3 eye, float id)
 {
 	vec3 normal = estimateNormal(p); // N
 	vec3 incidentVec = normalize(eye - p); // Normalize from origin (our eye) // V
 
 	float shininess = 0.0001;
-	float specInf = 0.005;
+	//float specInf = 0.005;
+	float specInf = 0.0;
 	float diffInf = 0.5;
 	float ambInf = 0.01;
 
@@ -361,7 +403,7 @@ vec3 phongContribution(vec3 p, vec3 eye, float id)
  * along by a fixed width, tracking how long it would take with proper ray marching,
  * then divide the two variables
  */
-#define AO_STEPS 8
+#define AO_STEPS 16
 float ambientOcclusion(vec3 pt, float marchStepSize)
 {
 	float depth = marchStepSize; // Start a little way off the object
@@ -377,11 +419,45 @@ float ambientOcclusion(vec3 pt, float marchStepSize)
 	}
 
 
-	return depth/steppedDist;
+
+	return steppedDist/(marchStepSize*float(AO_STEPS)); //TODO: Find new metric
 }
 
 
-#define SHADOW_FALLOFF 0.01
+/*
+ * Standard marching code, except looking for the nearest spot we graze on the scene
+ * for penumbra puproses
+ */
+vec2 shadowCheck(vec3 eye, vec3 marchDir, float start, float end) 
+{
+	float depth = start;
+	
+	float nearestHit = MAX_DIST;
+
+
+	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
+	{
+		vec2 dist = sdf_scene(eye + depth * marchDir);
+		
+		if (dist.x < nearestHit)
+			nearestHit = dist.x;
+
+		if (dist.x < EPSILON) // We hit something! (or close enough lol)
+			return vec2(depth, nearestHit);
+
+		depth += dist.x;
+
+		if (depth >= end) // Marched to the end, didn't hit anything
+			return vec2(end, nearestHit);
+	}
+
+
+	return vec2(end, nearestHit);
+}
+
+
+#define SHADOW_EPSILON 0.3
+#define SHADOW_FALLOFF 0.0001
 float calculateShadow(vec3 p)
 {
 	float shadowStrength = 0.0;
@@ -391,22 +467,42 @@ float calculateShadow(vec3 p)
 	{
 		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
 
-		float dist = getDistToScene(p + N * 0.01, normalize(lights[i].pos) + vec3(1.0 * SHADOW_FALLOFF), MIN_DIST, MAX_DIST).x;
+		vec2 shadowHit = shadowCheck(p + N, normalize(lights[i].pos) + vec3(1.0 * SHADOW_FALLOFF), MIN_DIST, MAX_DIST);
+		float dist = shadowHit.x;
+		float closestDist = shadowHit.y;
 
-		if (dist < distance(p, lights[i].pos))
+		float diff = dist - distance(p, lights[i].pos);
+		if (diff <= 0.0) // If we're in the shadow
 			shadowStrength += 1.0/float(LIGHT_COUNT);
+			
+		else  // TODO: Solve mathematically
+		{
+			float off = SHADOW_EPSILON - closestDist;
+			if (off > 0.0)
+				shadowStrength += off;
+				
+		}
+
+		
 
 	}
 	return shadowStrength;
 }
 
-float ambientOcclusionStrength = 0.5;
+
+// Shadow strengths calculated in main
+float ambientOcclusionStrength = 1.0;
+float shadowStrength = 0.1;
+float fogStrength = 0.1;
+//float ambientStepSize = 0.1;
+float ambientStepSize = slider;
+
 
 // You tell me :^)
 void main()
 {
 	// Get the angle of our ray
-	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(0.0, eyeY, 0.0));
+	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(eyeX, eyeY, 0.0));
 
 	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist
 	// ID of the object we've hit (if any)
@@ -428,15 +524,24 @@ void main()
 	vec3 color = vec3(0.0);
 	//color = hsv2rgb(vec3(dist/(MAX_DIST/32.0), 1.0, 1.0));
 
-	color += phongContribution(hitPos, eye, id);
+	if (shadowWorld == 1) // Check for user settings for debugging needs etc.
+		color = vec3(calculateShadow(hitPos));
+	else if (ambientWorld == 1)
+		color = vec3(ambientOcclusion(hitPos, ambientStepSize));
+	else if (distWorld == 1)
+		color = vec3(dist/MAX_DIST);
+	else // Otherewise render scene normally
+	{
+		color += phongContribution(hitPos, eye, id);
 
+		color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
 
-	color -= vec3(ambientOcclusion(hitPos, 0.006))*ambientOcclusionStrength;
+		color -= vec3(calculateShadow(hitPos))*shadowStrength;
+		
+		// Attenuate to the distance (fog)
+		color -= dist/MAX_DIST*fogStrength;
+	}
 
-	color -= vec3(calculateShadow(hitPos))*0.1;
-
-	// Attenuate to the distance (fog)
-	color -= dist/MAX_DIST;
 
 	gl_FragColor = vec4(color, 1.0);
 }
