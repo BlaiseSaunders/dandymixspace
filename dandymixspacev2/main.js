@@ -130,10 +130,11 @@ function onWindowResize()
 
 function animate() 
 {
-	slowDown = 0.43;
-	speedUp  = 0.5;
-	rotSpeed = 0.5;
-	rotSlow = 0.1;
+	speedScale = 0.5; // TODO: Scale for FPS
+	slowDown = 0.43*speedScale;
+	speedUp  = 0.5*speedScale;
+	rotSpeed = 0.5*speedScale;
+	rotSlow = 0.1*speedScale;
 	
 	window.xspeed += window.xpress * speedUp;
 	window.zspeed += window.zpress * speedUp;

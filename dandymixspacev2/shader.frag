@@ -420,7 +420,7 @@ float ambientOcclusion(vec3 pt, float marchStepSize)
 
 
 
-	return steppedDist/(marchStepSize*float(AO_STEPS)); //TODO: Find new metric
+	return (marchStepSize*float(AO_STEPS))/steppedDist; //TODO: Find new metric
 }
 
 
@@ -491,11 +491,11 @@ float calculateShadow(vec3 p)
 
 
 // Shadow strengths calculated in main
-float ambientOcclusionStrength = 1.0;
+float ambientOcclusionStrength = 0.5;
 float shadowStrength = 0.1;
 float fogStrength = 0.1;
 //float ambientStepSize = 0.1;
-float ambientStepSize = slider;
+float ambientStepSize = 0.01;
 
 
 // You tell me :^)
