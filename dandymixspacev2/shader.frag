@@ -260,7 +260,7 @@ float sdf_abstract(vec3 pos)
 
 
 	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
-	//boxpt = rotate_x_point(pos, sin(iTime));
+	boxpt = rotate_x_point(boxpt, sin(iTime));
 	vec3 c = vec3(4.0);
 	//boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
 	//boxpt = pos - c * clamp(pos / c, -l , l);
@@ -359,6 +359,37 @@ vec3 estimateNormal(vec3 p)
 	));
 }
 
+/*
+ * Standard marching code, except looking for the nearest spot we graze on the scene
+ * for penumbra puproses
+ */
+vec2 shadowCheck(vec3 viewer, vec3 marchDir, float start, float end) 
+{
+	float depth = start;
+	
+	float nearestHit = MAX_DIST;
+
+
+	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
+	{
+		vec2 dist = sdf_scene(viewer + depth * marchDir);
+		
+		if (dist.x < nearestHit)
+			nearestHit = dist.x;
+
+		if (dist.x < EPSILON) // We hit something! (or close enough lol)
+			return vec2(depth, nearestHit);
+
+		depth += dist.x;
+
+		if (depth >= end) // Marched to the end, didn't hit anything
+			return vec2(end, nearestHit);
+	}
+
+
+	return vec2(end, nearestHit);
+}
+
 
 // Calculate standard phong lighting for all lights and return a colour contribution
 vec3 phongContribution(vec3 p, vec3 viewer, float id)
@@ -378,12 +409,28 @@ vec3 phongContribution(vec3 p, vec3 viewer, float id)
 	{
 		float diff = 0.0;
 		float spec = 0.0;
+		float scaleDown = 1.0;
 		vec3 amb = vec3(0.0);
 
 		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
 		// TESTING CODE //vec3 lightVec = normalize(vec3(2.0, 4.0, -2.0) - p); // Vector to light // L
 		vec3 reflectVec = normalize(reflect(-lightVec, normal));
-		
+
+		// Check if we are in view of light
+		vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
+		float distToSceneLightDir = march.x;
+		float distToLight = distance(p, lights[i].pos);
+
+		float lightTolerance = 0.2;
+		float penTolerance = lightTolerance+0.7;
+		if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
+			continue;
+		else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
+			scaleDown -= march.y;
+
+
+
+
 		amb = lights[i].colour*ambInf; // Calculate ambient contribution
 
 		// Calculate diffuse component
@@ -400,7 +447,7 @@ vec3 phongContribution(vec3 p, vec3 viewer, float id)
 		amb -= amb*scalar;*/
 
 
-		outCol += ((diff + spec)*lights[i].colour)+ amb;
+		outCol += (((diff + spec)*lights[i].colour) + amb)*scaleDown;
 	}
 
 	return outCol;
@@ -435,37 +482,6 @@ float ambientOcclusion(vec3 pt, float marchStepSize)
 	return (marchStepSize*float(AO_STEPS))/steppedDist; //TODO: Find new metric
 }
 
-
-/*
- * Standard marching code, except looking for the nearest spot we graze on the scene
- * for penumbra puproses
- */
-vec2 shadowCheck(vec3 viewer, vec3 marchDir, float start, float end) 
-{
-	float depth = start;
-	
-	float nearestHit = MAX_DIST;
-
-
-	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
-	{
-		vec2 dist = sdf_scene(viewer + depth * marchDir);
-		
-		if (dist.x < nearestHit)
-			nearestHit = dist.x;
-
-		if (dist.x < EPSILON) // We hit something! (or close enough lol)
-			return vec2(depth, nearestHit);
-
-		depth += dist.x;
-
-		if (depth >= end) // Marched to the end, didn't hit anything
-			return vec2(end, nearestHit);
-	}
-
-
-	return vec2(end, nearestHit);
-}
 
 
 #define SHADOW_EPSILON 0.3
@@ -512,11 +528,45 @@ float ambientStepSize = 0.01;
 vec3 getColour(vec3 hitPos, vec3 viewer, float id)
 {
 	vec3 color = vec3(0.0);
-	color += phongContribution(hitPos, viewer, id);
+
+
+	// Legacy shadow code
+	//color -= vec3(calculateShadow(hitPos))*shadowStrength;
+	
+
+
+	// If we have a glossy object
+	#define BOUNCE_COUNT 1
+	vec3 prevPoint = eye;
+	if (id == float(NON_LIGHT_OBJECT_COUNT-1))
+	{
+		for (int i = 0; i < BOUNCE_COUNT; i++)
+		{
+			vec3 normal = estimateNormal(hitPos); // N
+			vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
+
+			vec3 bounceAngle = normalize(reflect(incidentVec, normal));
+			vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle, MIN_DIST, MAX_DIST);
+			float bounceDist = bounceHit.x;
+			float bounceId = bounceHit.y;
+			float bounceSteps = bounceHit.z;
+
+			vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
+
+			vec3 bounceColor = phongContribution(bounceHitPos, hitPos, bounceId);
+
+			color = bounceColor;
+			prevPoint = hitPos;
+			hitPos = bounceHitPos;
+		}
+	}
+	else // Otherwise just use standard phong
+		color += phongContribution(hitPos, viewer, id);
+
+
+
 
 	color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
-
-	color -= vec3(calculateShadow(hitPos))*shadowStrength;
 
 	return color;
 }
@@ -543,38 +593,10 @@ void main()
 		return;
 	}
 
+
 	// The point our view ray hit
 	vec3 hitPos = eye + dist * dir;
-
-	vec3 prevPoint = eye;
-
-	#define BOUNCE_COUNT 2
-	// Glossy testing, check next bounce
-	if (id == float(NON_LIGHT_OBJECT_COUNT-1))
-	{
-		for (int i = 0; i < BOUNCE_COUNT; i++)
-		{
-			vec3 normal = estimateNormal(hitPos); // N
-			vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
-
-			vec3 bounceAngle = normalize(reflect(incidentVec, normal));
-			vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle, MIN_DIST, MAX_DIST);
-			float bounceDist = bounceHit.x;
-			float bounceId = bounceHit.y;
-			float bounceSteps = bounceHit.z;
-
-			vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
-
-			vec3 bounceColor = getColour(bounceHitPos, hitPos, bounceId);
-
-			//gl_FragColor = vec4(hsv2rgb(vec3(bounceId/float(OBJECT_COUNT), 1.0, 1.0)), 1.0);
-			gl_FragColor = vec4(bounceColor, 1.0);
-			//gl_FragColor = vec4(vec3(bounceSteps/float(MAX_MARCHING_STEPS/4)), 1.0);
-			prevPoint = hitPos;
-			hitPos = bounceHitPos;
-		}
-		return;
-	}
+	
 
 	if (id >= float(NON_LIGHT_OBJECT_COUNT))
 		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
