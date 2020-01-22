@@ -89,7 +89,9 @@ function createTracerSurface()
 		eyeX: {type: 'float', value: 0.0 },
 		shadowWorld: {type: 'int', value: 0 },
 		ambientWorld: {type: 'int', value: 0 },
+		pbr: {type: 'int', value: 0 },
 		distWorld: {type: 'int', value: 0 },
+		shadowCalcPhong: {type: 'int', value: 0 },
 		slider: {type: 'float', value: 0.0 },
 	}
 
@@ -129,6 +131,13 @@ function onWindowResize()
 
 function animate() 
 {
+	// TODO: Move to onclick func
+	if (document.getElementById("pbr").checked)
+		document.getElementById("RTXOff").style.display = 'none';
+	else
+		document.getElementById("RTXOff").style.display = 'block';
+
+
 	speedScale = 0.5; // TODO: Scale for FPS
 	slowDown = 0.43*speedScale;
 	speedUp  = 0.5*speedScale;
@@ -185,6 +194,14 @@ function animate()
 		screenMaterial.uniforms.distWorld.value = 1;		
 	else
 		screenMaterial.uniforms.distWorld.value = 0;
+	if (document.getElementById("phongShadows").checked)
+		screenMaterial.uniforms.shadowCalcPhong.value = 1;
+	else
+		screenMaterial.uniforms.shadowCalcPhong.value = 0;
+	if (document.getElementById("pbr").checked)
+		screenMaterial.uniforms.pbr.value = 1;
+	else
+		screenMaterial.uniforms.pbr.value = 0;
 
 	var sliderVal = document.getElementById("slider").value/100;
 	screenMaterial.uniforms.slider.value = sliderVal;

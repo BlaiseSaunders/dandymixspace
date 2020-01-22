@@ -10,9 +10,15 @@
 		<div>
 			<div class='hover'>
 					<h4 id='info'>Loading...</h4>
-					<input type="checkbox" id='shadow'>ShadowWorld</input><br>
-					<input type="checkbox" id='ambient'>AmbientWorld</input><br>
-					<input type="checkbox" id='dist'>StepsWorld</input><br>
+					<input type="checkbox" id='pbr' checked>RTX On</input><br>
+					<br>
+					<div id='RTXOff'>
+						<input type="checkbox" id='shadow'>ShadowWorld</input><br>
+						<input type="checkbox" id='ambient'>AmbientWorld</input><br>
+						<input type="checkbox" id='dist'>StepsWorld</input><br>
+						<input type="checkbox" id='phongShadows' checked>PhongShadows</input><br>
+					</div>
+					
 					<p>Set Shader Slider</p>
 					<div class="slidecontainer">
 						<input type="range" min="0" max="100" value="50" class="slider" id="slider" />

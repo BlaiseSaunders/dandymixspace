@@ -27,6 +27,10 @@ uniform vec2 iResolution;
 uniform float iTime;
 uniform float scalePower;
 
+uniform int shadowCalcPhong;
+
+uniform int pbr;
+
 uniform int shadowWorld;
 uniform int ambientWorld;
 uniform int distWorld;
@@ -392,7 +396,7 @@ vec2 shadowCheck(vec3 viewer, vec3 marchDir, float start, float end)
 
 
 // Calculate standard phong lighting for all lights and return a colour contribution
-vec3 phongContribution(vec3 p, vec3 viewer, float id)
+vec3 phongContribution(vec3 p, vec3 viewer, float id, int shadowCalc)
 {
 	vec3 normal = estimateNormal(p); // N
 	vec3 incidentVec = normalize(viewer - p); // Normalize from origin (our viewer) // V
@@ -413,21 +417,25 @@ vec3 phongContribution(vec3 p, vec3 viewer, float id)
 		vec3 amb = vec3(0.0);
 
 		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
-		// TESTING CODE //vec3 lightVec = normalize(vec3(2.0, 4.0, -2.0) - p); // Vector to light // L
 		vec3 reflectVec = normalize(reflect(-lightVec, normal));
 
-		// Check if we are in view of light
-		vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
-		float distToSceneLightDir = march.x;
-		float distToLight = distance(p, lights[i].pos);
+		// Check if we want to calculate shadows
+		if (shadowCalc == 1)
+		{
 
-		float lightTolerance = 0.2;
-		float penTolerance = lightTolerance+0.7;
-		if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
-			continue;
-		else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
-			scaleDown -= march.y;
 
+			// Check if we are in view of light
+			vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
+			float distToSceneLightDir = march.x;
+			float distToLight = distance(p, lights[i].pos);
+
+			float lightTolerance = 0.2;
+			float penTolerance = lightTolerance+0.7;
+			if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
+				continue;
+			else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
+				scaleDown -= march.y;
+		}
 
 
 
@@ -522,10 +530,11 @@ float calculateShadow(vec3 p)
 float ambientOcclusionStrength = 0.5;
 float shadowStrength = 0.1;
 float fogStrength = 0.1;
+float stepEffectStrength = 1.0;
 //float ambientStepSize = 0.1;
 float ambientStepSize = 0.01;
 
-vec3 getColour(vec3 hitPos, vec3 viewer, float id)
+vec3 getColour(vec3 hitPos, vec3 viewer, float id, int shadowCalc)
 {
 	vec3 color = vec3(0.0);
 
@@ -533,8 +542,6 @@ vec3 getColour(vec3 hitPos, vec3 viewer, float id)
 	// Legacy shadow code
 	//color -= vec3(calculateShadow(hitPos))*shadowStrength;
 	
-
-
 	// If we have a glossy object
 	#define BOUNCE_COUNT 1
 	vec3 prevPoint = eye;
@@ -553,7 +560,7 @@ vec3 getColour(vec3 hitPos, vec3 viewer, float id)
 
 			vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
 
-			vec3 bounceColor = phongContribution(bounceHitPos, hitPos, bounceId);
+			vec3 bounceColor = phongContribution(bounceHitPos, hitPos, bounceId, shadowCalc);
 
 			color = bounceColor;
 			prevPoint = hitPos;
@@ -561,9 +568,9 @@ vec3 getColour(vec3 hitPos, vec3 viewer, float id)
 		}
 	}
 	else // Otherwise just use standard phong
-		color += phongContribution(hitPos, viewer, id);
+		color += phongContribution(hitPos, viewer, id, shadowCalc);
 
-
+ 
 
 
 	color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
@@ -571,16 +578,58 @@ vec3 getColour(vec3 hitPos, vec3 viewer, float id)
 	return color;
 }
 
-
-
-// You tell me :^)
-void main()
+vec3 lightContrib(vec3 p, vec3 viewer, int shadowCalc)
 {
-	// Get the angle of our ray
-	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(eyeX, eyeY, 0.0));
+	vec3 normal = estimateNormal(p); // N
+	vec3 incidentVec = normalize(viewer - p); // Normalize from origin (our viewer) // V
 
-	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist
-	// ID of the object we've hit (if any)
+	float shininess = 0.0001;
+	//float specInf = 0.005;
+	float specInf = 0.0;
+	float diffInf = 0.5;
+	float ambInf = 0.01;
+
+	vec3 outCol = vec3(0.0);
+	
+	float scaleDown = 1.0;
+
+	for (int i = 0; i < LIGHT_COUNT; i++)
+	{
+		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
+		vec3 reflectVec = normalize(reflect(-lightVec, normal));
+
+		// Check if we want to calculate shadows
+		if (shadowCalc == 1)
+		{
+			// Check if we are in view of light
+			vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
+			float distToSceneLightDir = march.x;
+			float distToLight = distance(p, lights[i].pos);
+
+			float lightTolerance = 0.2;
+			float penTolerance = lightTolerance+0.7;
+			if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
+				continue;
+			else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
+				scaleDown -= march.y;
+		}
+
+
+		outCol += lights[i].colour*scaleDown;
+	}
+
+	return outCol;
+}
+
+//const float reflectID[OBJECT_COUNT] = float[OBJECT_COUNT](1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+
+
+vec3 traceRender(vec3 dir, vec3 eye, float randOff)
+{
+	vec3 color = vec3(0.0);
+	
+
+	// Make an initial bounce
 	vec3 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
 	float dist = hit.x;
 	float id = hit.y;
@@ -588,10 +637,74 @@ void main()
 
 	// Check to make sure we hit something
 	if (hit.y == -1.0) 
+		return vec3(0.0, 0.0, 0.0);
+
+	// The point our view ray hit
+	vec3 hitPos = eye + dist * dir;
+
+	float reflectivity = 0.1;
+	float variance = 0.1;
+
+	float bounceFalloff = 0.2;
+
+	#define TRACE_BOUNCE_COUNT 2
+	// Get contrib for first hit
+	color += phongContribution(hitPos, eye, id, 1);
+	vec3 prevPoint = eye;
+	float prevId = id;
+	for (int i = 0; i < TRACE_BOUNCE_COUNT; i++)
 	{
-		gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
-		return;
+		vec3 normal = estimateNormal(hitPos); // N
+		vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
+
+		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
+			variance = 0.0;
+		else
+			variance = 0.0;
+
+
+		vec3 bounceAngle = normalize(reflect(incidentVec, normal));
+		vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle+(vec3(rand(hitPos.xy), rand(vec2(hitPos.y+randOff, hitPos.z-randOff)), rand(vec2(hitPos.z, hitPos.x)))*variance), MIN_DIST, MAX_DIST);
+		float bounceDist = bounceHit.x;
+		float bounceId = bounceHit.y;
+		float bounceSteps = bounceHit.z;
+
+		// TODO: Solve programmatically
+		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
+			reflectivity = 0.5;
+		else
+			reflectivity = 0.1;
+
+		vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
+
+		vec3 bounceColor = lightContrib(bounceHitPos, hitPos, 1)*reflectivity;
+
+		color += bounceColor*(bounceFalloff/float(i+1)); // Add in the color
+
+
+		prevPoint = hitPos;
+		prevId = bounceId;
+		hitPos = bounceHitPos;
 	}
+
+	return color;
+}
+
+
+vec3 fastRender(vec3 dir, vec3 eye)
+{
+	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist	
+	// ID of the object we've hit (if any)
+	vec3 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
+	float dist = hit.x;
+	float id = hit.y;
+	float steps = hit.z;
+
+	vec3 color = vec3(0.0);
+
+	// Check to make sure we hit something
+	if (hit.y == -1.0) 
+		return vec3(0.0, 0.0, 0.0);
 
 
 	// The point our view ray hit
@@ -601,14 +714,8 @@ void main()
 	if (id >= float(NON_LIGHT_OBJECT_COUNT))
 		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
 			if (i == int(id)-NON_LIGHT_OBJECT_COUNT)
-			{
-				gl_FragColor = vec4(lights[i].colour, 1.0);
-				return;
-			}
+				return lights[i].colour;
 
-	//vec3 color = hsv2rgb(vec3(0.1, 1.0, 1.0));
-	vec3 color = vec3(0.0);
-	//color = hsv2rgb(vec3(dist/(MAX_DIST/32.0), 1.0, 1.0));
 
 	if (shadowWorld == 1) // Check for user settings for debugging needs etc.
 		color = vec3(calculateShadow(hitPos));
@@ -618,9 +725,34 @@ void main()
 		color = vec3(steps/float(MAX_MARCHING_STEPS))*1.0;
 	else // Otherewise render scene normally
 	{
-		color = getColour(hitPos, eye, id);
+		color = getColour(hitPos, eye, id, shadowCalcPhong);
 		// Attenuate to the distance (fog)
 		color -= dist/MAX_DIST*fogStrength;
+
+		color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
+	}
+
+	return color;
+}
+
+
+// You tell me :^)
+void main()
+{
+	// Get the angle of our ray
+	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(eyeX, eyeY, 0.0));
+
+
+	vec3 color = vec3(0.0);
+
+	if (pbr == 0)
+		color = fastRender(dir, eye);
+	#define RENDER_PASSES 1
+	else
+	{
+		for (int i = 0; i < RENDER_PASSES; i++)
+			color += traceRender(dir, eye, float(i));
+		color /= float(RENDER_PASSES);
 	}
 
 
