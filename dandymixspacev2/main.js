@@ -45,6 +45,7 @@ function init()
 	document.getElementById("info").innerHTML = '';
 
 	console.log("Initialized DandyDance Web :^)")
+	onWindowResize();
 }
 
 
