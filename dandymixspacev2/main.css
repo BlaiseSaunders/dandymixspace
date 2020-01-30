@@ -23,9 +23,47 @@ canvas
 	/*width: 10%;
 	height: 30%;*/
 	display: inline-block;
-	white-space: nowrap;
-	max-width: 150px;
-	max-height: 300px;
-	background-color: rgba(40, 192, 212, 0.335);
+	max-width: 90%;
+	max-height: 90%;
+	padding: 1%;
+	background-color: rgba(75, 107, 136, 0.882);
+	margin: auto;
+	overflow-y:auto
 }
 
+.right
+{
+	float: right;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	/*width: 10%;
+	height: 30%;*/
+	display: inline-block;
+	white-space: nowrap;
+	max-width: 20vw;
+	height: 15em;
+	margin-left: auto;
+	margin-right: 1vw;
+	margin-top: 1vw;
+	text-align: center;
+	padding-bottom: 1%;
+	font-size: 1vw;
+	/*background-color: rgba(75, 107, 136, 0.382);*/
+}
+
+.footer
+{
+
+	bottom: 0;
+	/*width: 10%;
+	height: 30%;*/
+	display: inline-block;
+	white-space: nowrap;
+	max-width: 600px;
+	width: 70%;
+	max-height: 200px;
+	margin-top: auto;
+	vertical-align: bottom;
+}

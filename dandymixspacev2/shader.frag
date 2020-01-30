@@ -42,8 +42,8 @@ uniform Light lights[LIGHT_COUNT];
 varying vec3 vUv;
 
 
-//const int MAX_MARCHING_STEPS = 16;
-const int MAX_MARCHING_STEPS = 256;
+const int MAX_MARCHING_STEPS = 128;
+//const int MAX_MARCHING_STEPS = 256;
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 60.0;
 const float EPSILON = 0.0001;
@@ -254,6 +254,11 @@ float sdf_fractal(vec3 pos)
 
 
 
+float repeat(float d, float domain)
+{
+    return mod(d, domain)-domain/2.0;
+}
+
 float sdf_abstract(vec3 pos)
 {
 	vec3 z = pos;
@@ -263,8 +268,9 @@ float sdf_abstract(vec3 pos)
 	pos = z;
 
 
-	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
+	vec3 boxpt = translate_point(pos, vec3(cos(2.0*iTime)*0.3, cos(2.0*iTime+0.5)*0.2, 0.0));
 	boxpt = rotate_x_point(boxpt, sin(iTime));
+	boxpt = rotate_y_point(boxpt, cos(iTime));
 	vec3 c = vec3(4.0);
 	//boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
 	//boxpt = pos - c * clamp(pos / c, -l , l);
@@ -285,22 +291,22 @@ float lightSize = 0.1;
 
 // Add light count
 #define NON_LIGHT_OBJECT_COUNT 7
-#define OBJECT_COUNT 9 // Manually add for amount of lights
+#define OBJECT_COUNT 7 // Manually add for amount of lights
 float distances[OBJECT_COUNT];
 vec2 sdf_scene(vec3 pos)
 {
-	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 4.0)); // Our floor
-	distances[1] = sdf_plane(pos, vec4(0.0, 0.0, 1.0, 10.0)); // Backing plane
-	distances[2] = sdf_plane(pos, vec4(1.0, 0.0, 0.0, 10.0)); // Backing plane
-	distances[3] = sdf_plane(pos, vec4(-1.0, 0.0, 0.0, 10.0)); // Backing plane
-	distances[4] = sdf_plane(pos, vec4(0.0, -1.0, 0.0, 10.0)); // Backing plane
-	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 10.0)); // Roof
+	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 5.0)); // Our floor
+	distances[1] = sdf_plane(pos, vec4(0.0, 0.0, 1.0, 20.0)); // Backing plane
+	distances[2] = sdf_plane(pos, vec4(1.0, 0.0, 0.0, 20.0)); // Backing plane
+	distances[3] = sdf_plane(pos, vec4(-1.0, 0.0, 0.0, 20.0)); // Backing plane
+	distances[4] = sdf_plane(pos, vec4(0.0, -1.0, 0.0, 20.0)); // Backing plane
+	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 20.0)); // Roof
 	distances[6] = sdf_abstract(pos); // Abstract shape
 	//distances[1] = sdf_fractal(pos); // Abstract shape
 
 	// Add in the lights
-	for (int i = 0; i < LIGHT_COUNT; i++)
-		distances[NON_LIGHT_OBJECT_COUNT+i] = sdf_sphere(translate_point(pos, lights[i].pos), lightSize);
+	//for (int i = 0; i < LIGHT_COUNT; i++)
+	//	distances[NON_LIGHT_OBJECT_COUNT+i] = sdf_sphere(translate_point(pos, lights[i].pos), lightSize);
 
 	// Calculate minimum over an array of points
 	float smallest_i = -1.0;
@@ -343,11 +349,14 @@ vec3 getDistToScene(vec3 viewer, vec3 marchDir, float start, float end)
 	return vec3(end, -1.0, float(steps));
 }
 
+
 // Get a ray direction based off of the pixel coordinate
 vec3 rayDirection(float fov, vec2 size, vec2 fragCoord, vec3 rot) 
 {
 	vec2 xy = fragCoord - size / 2.0; // Normalize coordinates
 	float z = size.y / tan(radians(fov) / 2.0);
+
+	
 	return rotate_y_x_point(normalize(vec3(xy, -z)), rot.x, rot.y); // TODO: Have it not be shit
 }
 
@@ -623,74 +632,6 @@ vec3 lightContrib(vec3 p, vec3 viewer, int shadowCalc)
 
 //const float reflectID[OBJECT_COUNT] = float[OBJECT_COUNT](1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
 
-
-vec3 traceRender(vec3 dir, vec3 eye, float randOff)
-{
-	vec3 color = vec3(0.0);
-	
-
-	// Make an initial bounce
-	vec3 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
-	float dist = hit.x;
-	float id = hit.y;
-	float steps = hit.z;
-
-	// Check to make sure we hit something
-	if (hit.y == -1.0) 
-		return vec3(0.0, 0.0, 0.0);
-
-	// The point our view ray hit
-	vec3 hitPos = eye + dist * dir;
-
-	float reflectivity = 0.1;
-	float variance = 0.1;
-
-	float bounceFalloff = 0.2;
-
-	#define TRACE_BOUNCE_COUNT 2
-	// Get contrib for first hit
-	color += phongContribution(hitPos, eye, id, 1);
-	vec3 prevPoint = eye;
-	float prevId = id;
-	for (int i = 0; i < TRACE_BOUNCE_COUNT; i++)
-	{
-		vec3 normal = estimateNormal(hitPos); // N
-		vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
-
-		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
-			variance = 0.0;
-		else
-			variance = 0.0;
-
-
-		vec3 bounceAngle = normalize(reflect(incidentVec, normal));
-		vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle+(vec3(rand(hitPos.xy), rand(vec2(hitPos.y+randOff, hitPos.z-randOff)), rand(vec2(hitPos.z, hitPos.x)))*variance), MIN_DIST, MAX_DIST);
-		float bounceDist = bounceHit.x;
-		float bounceId = bounceHit.y;
-		float bounceSteps = bounceHit.z;
-
-		// TODO: Solve programmatically
-		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
-			reflectivity = 0.5;
-		else
-			reflectivity = 0.1;
-
-		vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
-
-		vec3 bounceColor = lightContrib(bounceHitPos, hitPos, 1)*reflectivity;
-
-		color += bounceColor*(bounceFalloff/float(i+1)); // Add in the color
-
-
-		prevPoint = hitPos;
-		prevId = bounceId;
-		hitPos = bounceHitPos;
-	}
-
-	return color;
-}
-
-
 vec3 fastRender(vec3 dir, vec3 eye)
 {
 	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist	
@@ -711,11 +652,12 @@ vec3 fastRender(vec3 dir, vec3 eye)
 	vec3 hitPos = eye + dist * dir;
 	
 
-	if (id >= float(NON_LIGHT_OBJECT_COUNT))
+	if (id >= float(NON_LIGHT_OBJECT_COUNT) && 1 == 0)
 		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
 			if (i == int(id)-NON_LIGHT_OBJECT_COUNT)
 				return lights[i].colour;
 
+	 
 
 	if (shadowWorld == 1) // Check for user settings for debugging needs etc.
 		color = vec3(calculateShadow(hitPos));
@@ -732,7 +674,29 @@ vec3 fastRender(vec3 dir, vec3 eye)
 		color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
 	}
 
+	if (id != 6.0) // It's da floor
+		color = color*0.2;
+
 	return color;
+}
+
+// You tell me :^)
+mat4 lookAt(vec3 eye, vec3 at, vec3 up)
+{
+	vec3 zaxis = normalize(eye - at);    
+	vec3 xaxis = normalize(cross(zaxis, up));
+	vec3 yaxis = cross(xaxis, zaxis);
+
+	zaxis = vec3(-zaxis.x, -zaxis.y, -zaxis.z);
+
+	mat4 viewMatrix = mat4(
+		vec4(xaxis.x, xaxis.y, xaxis.z, -dot(xaxis, eye)),
+		vec4(yaxis.x, yaxis.y, yaxis.z, -dot(yaxis, eye)),
+		vec4(zaxis.x, zaxis.y, zaxis.z, -dot(zaxis, eye)),
+		vec4(0, 0, 0, 1)
+	);
+
+	return viewMatrix;
 }
 
 
@@ -742,19 +706,10 @@ void main()
 	// Get the angle of our ray
 	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(eyeX, eyeY, 0.0));
 
-
 	vec3 color = vec3(0.0);
 
-	if (pbr == 0)
-		color = fastRender(dir, eye);
-	#define RENDER_PASSES 1
-	else
-	{
-		for (int i = 0; i < RENDER_PASSES; i++)
-			color += traceRender(dir, eye, float(i));
-		color /= float(RENDER_PASSES);
-	}
-
+	color = fastRender(dir, eye);
+	
 
 	gl_FragColor = vec4(color, 1.0);
 }

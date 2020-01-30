@@ -6,6 +6,45 @@ init();
 animate();
 
 
+(function() 
+{
+	document.onmousemove = handleMouseMove;
+	function handleMouseMove(event) 
+	{
+	    var eventDoc, doc, body;
+    
+	    event = event || window.event; // IE-ism
+    
+	    // If pageX/Y aren't available and clientX/Y are,
+	    // calculate pageX/Y - logic taken from jQuery.
+	    // (This is to support old IE)
+	    if (event.pageX == null && event.clientX != null) 
+	    {
+		eventDoc = (event.target && event.target.ownerDocument) || document;
+		doc = eventDoc.documentElement;
+		body = eventDoc.body;
+    
+		event.pageX = event.clientX +
+		  (doc && doc.scrollLeft || body && body.scrollLeft || 0) -
+		  (doc && doc.clientLeft || body && body.clientLeft || 0);
+		event.pageY = event.clientY +
+		  (doc && doc.scrollTop  || body && body.scrollTop  || 0) -
+		  (doc && doc.clientTop  || body && body.clientTop  || 0 );
+	    }
+    
+	    // Use event.pageX / event.pageY here
+	    var xPos = event.pageX/window.innerWidth*1.0;
+	    var yPos = event.pageY/window.innerHeight*1.0;
+	    console.log(xPos);
+	    window.x = (xPos-0.5)*2.0;
+	    window.y = (1.0-yPos-0.5)*2.0;
+
+	    window.yrot = 1.0-xPos-0.5;
+	    window.xrot = 1.0-yPos-0.5;
+	}
+})();
+
+
 function init() 
 {
 	console.log("Initializing DandyDance Web :^)...")
@@ -28,7 +67,7 @@ function init()
 
 	window.x = 0;
 	window.y = 0;
-	window.z = 5.0;
+	window.z = 2.0;
 	window.xspeed = 0;
 	window.yspeed = 0;
 	window.zspeed = 0;
@@ -56,7 +95,7 @@ function createTracerSurface()
 	var lightdef1 = 
 	{
 		pos: new THREE.Vector3(4.0, 1.0, 5.0),
-		colour: new THREE.Vector3(0.8, 1.0, 0.1),
+		colour: new THREE.Vector3(0.1, 1.0, 0.1),
 		intens: 1.0,
 		dist: 1.0
 	}
@@ -78,8 +117,6 @@ function createTracerSurface()
 
 	let uniforms = 
 	{
-		colorB: {type: 'vec3', value: new THREE.Color(0x232323)},
-		colorA: {type: 'vec3', value: new THREE.Color(0x2c2c2c)},
 		iResolution: {type: 'vec2', value: new THREE.Vector2(1920, 1080)},
 		iTime: {type: 'float', value: 1.0 },
 		scalePower: {type: 'float', value: 1.0 },
@@ -90,9 +127,9 @@ function createTracerSurface()
 		eyeX: {type: 'float', value: 0.0 },
 		shadowWorld: {type: 'int', value: 0 },
 		ambientWorld: {type: 'int', value: 0 },
-		pbr: {type: 'int', value: 0 },
+		pbr: {type: 'int', value: 1 },
 		distWorld: {type: 'int', value: 0 },
-		shadowCalcPhong: {type: 'int', value: 0 },
+		shadowCalcPhong: {type: 'int', value: 1 },
 		slider: {type: 'float', value: 0.0 },
 	}
 
@@ -132,11 +169,6 @@ function onWindowResize()
 
 function animate() 
 {
-	// TODO: Move to onclick func
-	if (document.getElementById("pbr").checked)
-		document.getElementById("RTXOff").style.display = 'none';
-	else
-		document.getElementById("RTXOff").style.display = 'block';
 
 
 	speedScale = 0.5; // TODO: Scale for FPS
@@ -182,32 +214,7 @@ function animate()
 
 	requestAnimationFrame(animate);
 
-	// Check settings
-	if (document.getElementById("shadow").checked)
-		screenMaterial.uniforms.shadowWorld.value = 1;		
-	else
-		screenMaterial.uniforms.shadowWorld.value = 0;
-	if (document.getElementById("ambient").checked)
-		screenMaterial.uniforms.ambientWorld.value = 1;		
-	else
-		screenMaterial.uniforms.ambientWorld.value = 0;
-	if (document.getElementById("dist").checked)
-		screenMaterial.uniforms.distWorld.value = 1;		
-	else
-		screenMaterial.uniforms.distWorld.value = 0;
-	if (document.getElementById("phongShadows").checked)
-		screenMaterial.uniforms.shadowCalcPhong.value = 1;
-	else
-		screenMaterial.uniforms.shadowCalcPhong.value = 0;
-	if (document.getElementById("pbr").checked)
-		screenMaterial.uniforms.pbr.value = 1;
-	else
-		screenMaterial.uniforms.pbr.value = 0;
-
-	var sliderVal = document.getElementById("slider").value/100;
-	screenMaterial.uniforms.slider.value = sliderVal;
-	document.getElementById('sliderValue').innerHTML = sliderVal;
-
+	
 	screenMaterial.uniforms.iTime.value += 0.01;
 	let screenx = window.innerWidth * dpr;
 	let screeny = window.innerHeight * dpr;
