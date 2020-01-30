@@ -4,8 +4,9 @@ body
 	background-color: #000;
 	color: #fff;
 	font-family: Monospace;
-	font-size: 13px;
+	font-size: 16px;
 	line-height: 24px;
+	font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 
 canvas 
@@ -26,36 +27,37 @@ canvas
 	max-width: 90%;
 	max-height: 90%;
 	padding: 1%;
-	background-color: rgba(75, 107, 136, 0.882);
+	background-color: rgba(75, 106, 136, 0.37);
 	margin: auto;
 	overflow-y:auto
+}
+
+.main
+{
+	display: inline-block;
+	float: left;
+	vertical-align: top;
+
+	width: 100%;
+
 }
 
 .right
 {
 	float: right;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	margin-left: 20px;
+	margin-bottom: 20px;
 	/*width: 10%;
 	height: 30%;*/
 	display: inline-block;
-	white-space: nowrap;
+	
 	max-width: 20vw;
-	height: 15em;
-	margin-left: auto;
-	margin-right: 1vw;
-	margin-top: 1vw;
-	text-align: center;
-	padding-bottom: 1%;
-	font-size: 1vw;
+	
 	/*background-color: rgba(75, 107, 136, 0.382);*/
 }
 
 .footer
 {
-
 	bottom: 0;
 	/*width: 10%;
 	height: 30%;*/
@@ -64,6 +66,6 @@ canvas
 	max-width: 600px;
 	width: 70%;
 	max-height: 200px;
-	margin-top: auto;
+	margin-top: 100px;
 	vertical-align: bottom;
 }
