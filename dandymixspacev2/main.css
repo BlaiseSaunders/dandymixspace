@@ -113,18 +113,25 @@ table
 	border-radius: 25px;
 	display: inline-block;
 	overflow: hidden;
-	width: 100%;
 }
 
 iframe 
 {
 	overflow: hidden;
-	width: 100%;
 }
 
 @media 
 only screen and (max-width: 1260px),
 (min-device-width: 1260px) and (max-device-width: 1024px)  {
+
+	.round
+	{
+		width: 100%;
+	}
+	iframe
+	{
+		width: 100%;
+	}
 
 	/* Force table to not be like tables anymore */
 	table, thead, tbody, th, td, tr { 
