@@ -120,7 +120,7 @@ function createTracerSurface()
 		iResolution: {type: 'vec2', value: new THREE.Vector2(1920, 1080)},
 		iTime: {type: 'float', value: 1.0 },
 		scalePower: {type: 'float', value: 1.0 },
-		fieldOfView: {type: 'float', value: 110.0 },
+		fieldOfView: {type: 'float', value: 100.0 },
 		eye: {type: 'vec3', value: new THREE.Vector3(window.x, window.y, window.z)},
 		lights: {value: [ lightdef1, lightdef2, lightdef3 ] }, 
 		eyeY: {type: 'float', value: 0.0 },
@@ -129,7 +129,7 @@ function createTracerSurface()
 		ambientWorld: {type: 'int', value: 0 },
 		pbr: {type: 'int', value: 1 },
 		distWorld: {type: 'int', value: 0 },
-		shadowCalcPhong: {type: 'int', value: 1 },
+		shadowCalcPhong: {type: 'int', value: 0 },
 		slider: {type: 'float', value: 0.0 },
 	}
 

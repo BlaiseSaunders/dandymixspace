@@ -36,6 +36,10 @@ canvas
 	-webkit-border-radius:25px;
 	border-radius:25px;
 }
+
+
+
+
 .hover::-webkit-scrollbar 
 {
 	width: 1em;

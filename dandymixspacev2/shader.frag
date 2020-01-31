@@ -42,7 +42,7 @@ uniform Light lights[LIGHT_COUNT];
 varying vec3 vUv;
 
 
-const int MAX_MARCHING_STEPS = 128;
+const int MAX_MARCHING_STEPS = 64;
 //const int MAX_MARCHING_STEPS = 256;
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 60.0;
@@ -484,7 +484,7 @@ vec3 phongContribution(vec3 p, vec3 viewer, float id, int shadowCalc)
  * along by a fixed width, tracking how long it would take with proper ray marching,
  * then divide the two variables
  */
-#define AO_STEPS 16
+#define AO_STEPS 10
 float ambientOcclusion(vec3 pt, float marchStepSize)
 {
 	float depth = marchStepSize; // Start a little way off the object
@@ -657,51 +657,16 @@ vec3 fastRender(vec3 dir, vec3 eye)
 	vec3 hitPos = eye + dist * dir;
 	
 
-	if (id >= float(NON_LIGHT_OBJECT_COUNT) && 1 == 0)
-		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
-			if (i == int(id)-NON_LIGHT_OBJECT_COUNT)
-				return lights[i].colour;
+	color = getColour(hitPos, eye, id, shadowCalcPhong);
+	// Attenuate to the distance (fog)
+	color -= dist/MAX_DIST*fogStrength;
 
-	 
-
-	if (shadowWorld == 1) // Check for user settings for debugging needs etc.
-		color = vec3(calculateShadow(hitPos));
-	else if (ambientWorld == 1)
-		color = vec3(ambientOcclusion(hitPos, ambientStepSize));
-	else if (distWorld == 1)
-		color = vec3(steps/float(MAX_MARCHING_STEPS))*1.0;
-	else // Otherewise render scene normally
-	{
-		color = getColour(hitPos, eye, id, shadowCalcPhong);
-		// Attenuate to the distance (fog)
-		color -= dist/MAX_DIST*fogStrength;
-
-		color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
-	}
+	color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
 
 	if (id != 6.0 && id != 7.0) // It's da floor
 		color = color*0.01;
 
 	return color;
-}
-
-// You tell me :^)
-mat4 lookAt(vec3 eye, vec3 at, vec3 up)
-{
-	vec3 zaxis = normalize(eye - at);    
-	vec3 xaxis = normalize(cross(zaxis, up));
-	vec3 yaxis = cross(xaxis, zaxis);
-
-	zaxis = vec3(-zaxis.x, -zaxis.y, -zaxis.z);
-
-	mat4 viewMatrix = mat4(
-		vec4(xaxis.x, xaxis.y, xaxis.z, -dot(xaxis, eye)),
-		vec4(yaxis.x, yaxis.y, yaxis.z, -dot(yaxis, eye)),
-		vec4(zaxis.x, zaxis.y, zaxis.z, -dot(zaxis, eye)),
-		vec4(0, 0, 0, 1)
-	);
-
-	return viewMatrix;
 }
 
 
@@ -718,11 +683,6 @@ void main()
 
 	gl_FragColor = vec4(color, 1.0);
 }
-
-
-
-
-
 
 
 `; // For da JS
