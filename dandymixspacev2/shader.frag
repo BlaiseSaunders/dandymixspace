@@ -259,7 +259,7 @@ float repeat(float d, float domain)
     return mod(d, domain)-domain/2.0;
 }
 
-float sdf_abstract(vec3 pos)
+float sdf_abstract(vec3 pos, float off)
 {
 	vec3 z = pos;
 	if(z.x+z.y < 0.0) z.xy = -z.yx; // fold 1
@@ -268,9 +268,9 @@ float sdf_abstract(vec3 pos)
 	pos = z;
 
 
-	vec3 boxpt = translate_point(pos, vec3(cos(2.0*iTime)*0.3, cos(2.0*iTime+0.5)*0.2, 0.0));
-	boxpt = rotate_x_point(boxpt, sin(iTime));
-	boxpt = rotate_y_point(boxpt, cos(iTime));
+	vec3 boxpt = translate_point(pos, vec3(cos(2.0*iTime+off)*0.3, cos(2.0*iTime+0.5+off)*0.2, 0.0));
+	boxpt = rotate_x_point(boxpt, sin(iTime+off));
+	boxpt = rotate_y_point(boxpt, cos(iTime+off));
 	vec3 c = vec3(4.0);
 	//boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
 	//boxpt = pos - c * clamp(pos / c, -l , l);
@@ -290,18 +290,23 @@ float sdf_abstract(vec3 pos)
 float lightSize = 0.1;
 
 // Add light count
-#define NON_LIGHT_OBJECT_COUNT 7
-#define OBJECT_COUNT 7 // Manually add for amount of lights
+#define NON_LIGHT_OBJECT_COUNT 8
+#define OBJECT_COUNT 8 // Manually add for amount of lights
 float distances[OBJECT_COUNT];
 vec2 sdf_scene(vec3 pos)
 {
+
+	vec3 leftPt = translate_point(pos, vec3(0.5, 0.0, 0.0));
+	vec3 rightPt = translate_point(pos, vec3(-0.5, 0.0, 0.0));
+
 	distances[0] = sdf_plane(pos, vec4(0.0, 1.0, 0.0, 5.0)); // Our floor
 	distances[1] = sdf_plane(pos, vec4(0.0, 0.0, 1.0, 20.0)); // Backing plane
 	distances[2] = sdf_plane(pos, vec4(1.0, 0.0, 0.0, 20.0)); // Backing plane
 	distances[3] = sdf_plane(pos, vec4(-1.0, 0.0, 0.0, 20.0)); // Backing plane
 	distances[4] = sdf_plane(pos, vec4(0.0, -1.0, 0.0, 20.0)); // Backing plane
 	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 20.0)); // Roof
-	distances[6] = sdf_abstract(pos); // Abstract shape
+	distances[6] = sdf_abstract(leftPt, 0.0); // Abstract shape
+	distances[7] = sdf_abstract(rightPt, 0.5); // Abstract shape
 	//distances[1] = sdf_fractal(pos); // Abstract shape
 
 	// Add in the lights
@@ -552,7 +557,7 @@ vec3 getColour(vec3 hitPos, vec3 viewer, float id, int shadowCalc)
 	//color -= vec3(calculateShadow(hitPos))*shadowStrength;
 	
 	// If we have a glossy object
-	#define BOUNCE_COUNT 1
+	#define BOUNCE_COUNT 2
 	vec3 prevPoint = eye;
 	if (id == float(NON_LIGHT_OBJECT_COUNT-1))
 	{
@@ -674,8 +679,8 @@ vec3 fastRender(vec3 dir, vec3 eye)
 		color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
 	}
 
-	if (id != 6.0) // It's da floor
-		color = color*0.2;
+	if (id != 6.0 && id != 7.0) // It's da floor
+		color = color*0.01;
 
 	return color;
 }
