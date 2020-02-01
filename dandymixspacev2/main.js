@@ -45,6 +45,15 @@ animate();
 })();
 
 
+function toggleClass(classval, displayval)
+{
+	var list = document.getElementsByClassName(classval);
+	for (let item of list)
+    		item.style.display = displayval;
+
+}
+
+
 function init() 
 {
 	console.log("Initializing DandyDance Web :^)...")
