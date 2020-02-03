@@ -32,10 +32,8 @@ animate();
 		  (doc && doc.clientTop  || body && body.clientTop  || 0 );
 	    }
     
-	    // Use event.pageX / event.pageY here
 	    var xPos = event.pageX/window.innerWidth*1.0;
 	    var yPos = event.pageY/window.innerHeight*1.0;
-	    console.log(xPos);
 	    window.x = (xPos-0.5)*2.0;
 	    window.y = (1.0-yPos-0.5)*2.0;
 
@@ -45,13 +43,15 @@ animate();
 })();
 
 
-function toggleClass(classval, displayval)
+function toggleClass(classval, displayval, newclassval)
 {
 	var list = document.getElementsByClassName(classval);
 	for (let item of list)
-    		item.style.display = displayval;
-
+		item.style.display = displayval;
+		    
+	document.getElementById(classval).className = newclassval;
 }
+
 
 
 function init() 
@@ -224,7 +224,7 @@ function animate()
 	requestAnimationFrame(animate);
 
 	
-	screenMaterial.uniforms.iTime.value += 0.01;
+	screenMaterial.uniforms.iTime.value = window.performance.now()/4000;
 	let screenx = window.innerWidth * dpr;
 	let screeny = window.innerHeight * dpr;
 	screenMaterial.uniforms.iResolution.value = new THREE.Vector2(screenx, screeny);

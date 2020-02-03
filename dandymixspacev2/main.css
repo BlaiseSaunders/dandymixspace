@@ -220,7 +220,7 @@ only screen and (max-width: 1260px),
 
 .button h1
 {
-    color: rgba(226,31,62, 0.6);
+    color: rgba(226,31,62, 0.9999);
     text-shadow: 0 0 5px rgba(226,31,62, 0.999);
 }
 
@@ -319,4 +319,18 @@ only screen and (max-width: 1260px),
 }
 .buttonGrey:hover > a:after {
     border-left-color: #3da081;
+}
+
+
+.selected
+{
+	border-color: #2ac88c !important;
+    /*background: #17181A;*/
+    background: rgba(23, 24, 26, 0.6);
+    box-shadow: 0 0 0 #2ac88c !important;
+}
+
+.selected > h1
+{
+	text-shadow: 0 0 0 #000 !important;
 }
