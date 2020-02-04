@@ -10,7 +10,7 @@ window.shaders.fragmentShader = `
  *
  */
 
-#define LIGHT_COUNT 2 // UPDATE OBJECT COUNT TOO
+#define LIGHT_COUNT 1 // UPDATE OBJECT COUNT TOO
 struct Light
 {
 	vec3 pos;
@@ -45,7 +45,7 @@ varying vec3 vUv;
 //const int MAX_MARCHING_STEPS = 16;
 const int MAX_MARCHING_STEPS = 256;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 60.0;
+const float MAX_DIST = 256.0;
 const float EPSILON = 0.0001;
 
 
@@ -227,56 +227,6 @@ float sdf_box(vec3 pos, vec3 dim)
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-#define FRACTAL_STEPS 1
-float sdf_fractal(vec3 pos)
-{
-	float Scale = 0.1;
-
-	vec3 z = pos;
-	vec3 a1 = vec3(1,1,1);
-	vec3 a2 = vec3(-1,-1,1);
-	vec3 a3 = vec3(1,-1,-1);
-	vec3 a4 = vec3(-1,1,-1);
-	vec3 c;
-	float dist, d;
-	for (int n = 0; n < FRACTAL_STEPS; n++) 
-	{
-		c = a1; dist = length(z-a1);
-		d = length(z-a2); if (d < dist) { c = a2; dist=d; }
-		d = length(z-a3); if (d < dist) { c = a3; dist=d; }
-		d = length(z-a4); if (d < dist) { c = a4; dist=d; }
-		z = Scale*z-c*(Scale-1.0);
-	}
-
-	return length(z) * pow(Scale, float(-FRACTAL_STEPS));
-}
-
-
-
-
-float sdf_abstract(vec3 pos)
-{
-	vec3 z = pos;
-	if(z.x+z.y < 0.0) z.xy = -z.yx; // fold 1
-	if(z.x+z.z < 0.0) z.xz = -z.zx; // fold 2
-	if(z.y+z.z < 0.0) z.zy = -z.yz; // fold 3
-	pos = z;
-
-
-	vec3 boxpt = translate_point(pos, vec3(0.0, 1.0, 0.0));
-	boxpt = rotate_x_point(boxpt, sin(iTime));
-	vec3 c = vec3(4.0);
-	//boxpt = mod(boxpt+0.5*c,c)-0.5*c; // Infinite repition
-	//boxpt = pos - c * clamp(pos / c, -l , l);
-
-	float box = sdf_box(boxpt, vec3(0.7));
-
-
-	//return min(sdf_sphere(pos, 1.0), box);
-	return box;
-}
-
-
 /*
  * Scene generation function
  */
@@ -285,7 +235,7 @@ float lightSize = 0.1;
 
 // Add light count
 #define NON_LIGHT_OBJECT_COUNT 7
-#define OBJECT_COUNT 9 // Manually add for amount of lights
+#define OBJECT_COUNT 7 // Manually add for amount of lights
 float distances[OBJECT_COUNT];
 vec2 sdf_scene(vec3 pos)
 {
@@ -295,12 +245,8 @@ vec2 sdf_scene(vec3 pos)
 	distances[3] = sdf_plane(pos, vec4(-1.0, 0.0, 0.0, 10.0)); // Backing plane
 	distances[4] = sdf_plane(pos, vec4(0.0, -1.0, 0.0, 10.0)); // Backing plane
 	distances[5] = sdf_plane(pos, vec4(0.0, 0.0, -1.0, 10.0)); // Roof
-	distances[6] = sdf_abstract(pos); // Abstract shape
+	distances[6] = sdf_sphere(pos, (1.0));
 	//distances[1] = sdf_fractal(pos); // Abstract shape
-
-	// Add in the lights
-	for (int i = 0; i < LIGHT_COUNT; i++)
-		distances[NON_LIGHT_OBJECT_COUNT+i] = sdf_sphere(translate_point(pos, lights[i].pos), lightSize);
 
 	// Calculate minimum over an array of points
 	float smallest_i = -1.0;
@@ -363,222 +309,11 @@ vec3 estimateNormal(vec3 p)
 	));
 }
 
-/*
- * Standard marching code, except looking for the nearest spot we graze on the scene
- * for penumbra puproses
- */
-vec2 shadowCheck(vec3 viewer, vec3 marchDir, float start, float end) 
-{
-	float depth = start;
-	
-	float nearestHit = MAX_DIST;
-
-
-	for (int i = 0; i < MAX_MARCHING_STEPS; i++) 
-	{
-		vec2 dist = sdf_scene(viewer + depth * marchDir);
-		
-		if (dist.x < nearestHit)
-			nearestHit = dist.x;
-
-		if (dist.x < EPSILON) // We hit something! (or close enough lol)
-			return vec2(depth, nearestHit);
-
-		depth += dist.x;
-
-		if (depth >= end) // Marched to the end, didn't hit anything
-			return vec2(end, nearestHit);
-	}
-
-
-	return vec2(end, nearestHit);
-}
-
-
-// Calculate standard phong lighting for all lights and return a colour contribution
-vec3 phongContribution(vec3 p, vec3 viewer, float id, int shadowCalc)
-{
-	vec3 normal = estimateNormal(p); // N
-	vec3 incidentVec = normalize(viewer - p); // Normalize from origin (our viewer) // V
-
-	float shininess = 0.0001;
-	//float specInf = 0.005;
-	float specInf = 0.0;
-	float diffInf = 0.5;
-	float ambInf = 0.01;
-
-	vec3 outCol = vec3(0.0);
-
-	for (int i = 0; i < LIGHT_COUNT; i++)
-	{
-		float diff = 0.0;
-		float spec = 0.0;
-		float scaleDown = 1.0;
-		vec3 amb = vec3(0.0);
-
-		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
-		vec3 reflectVec = normalize(reflect(-lightVec, normal));
-
-		// Check if we want to calculate shadows
-		if (shadowCalc == 1)
-		{
-
-
-			// Check if we are in view of light
-			vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
-			float distToSceneLightDir = march.x;
-			float distToLight = distance(p, lights[i].pos);
-
-			float lightTolerance = 0.2;
-			float penTolerance = lightTolerance+0.7;
-			if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
-				continue;
-			else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
-				scaleDown -= march.y;
-		}
+vec3 albedo[7];
 
 
 
-		amb = lights[i].colour*ambInf; // Calculate ambient contribution
-
-		// Calculate diffuse component
-		diff += max(dot(lightVec, normal), 0.0);
-
-		// Calculate specular component
-		float specAngle = max(dot(reflectVec, incidentVec), 0.0);
-		spec += pow(specAngle, shininess/4.0) * specInf;
-
-		// Scale diff by distance from light // FAILED ATTEMPT AT LIGHTING FALLOFF
-		/*float scalar = (distance(lights[i].pos, p)/lights[i].dist);
-		spec -= spec*scalar;
-		diff -= diff*scalar;
-		amb -= amb*scalar;*/
-
-
-		outCol += (((diff + spec)*lights[i].colour) + amb)*scaleDown;
-	}
-
-	return outCol;
-}
-
-
-/*
- * Ambient Occlusion Implementation: 
- * 
- * March along the normal of the object, pixels in spaces with lots of things close by
- * will take longer to march forwards than objects with nothing close to them, step
- * along by a fixed width, tracking how long it would take with proper ray marching,
- * then divide the two variables
- */
-#define AO_STEPS 16
-float ambientOcclusion(vec3 pt, float marchStepSize)
-{
-	float depth = marchStepSize; // Start a little way off the object
-	vec3 marchDir = estimateNormal(pt); // Find the direction of the normal to march in
-	
-	float steppedDist = 0.0;
-
-	for (int i = 0; i < AO_STEPS; i++) 
-	{
-		vec2 dist = sdf_scene(pt + depth * marchDir);
-		depth += marchStepSize;
-		steppedDist += abs(dist.x);
-	}
-
-
-
-	return (marchStepSize*float(AO_STEPS))/steppedDist; //TODO: Find new metric
-}
-
-
-
-#define SHADOW_EPSILON 0.3
-#define SHADOW_FALLOFF 0.0001
-float calculateShadow(vec3 p)
-{
-	float shadowStrength = 0.0;
-	vec3 N = estimateNormal(p);
-
-	for (int i = 0; i < LIGHT_COUNT; i++)
-	{
-		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
-
-		vec2 shadowHit = shadowCheck(p + N, normalize(lights[i].pos) + vec3(1.0 * SHADOW_FALLOFF), MIN_DIST, MAX_DIST);
-		float dist = shadowHit.x;
-		float closestDist = shadowHit.y;
-
-		float diff = dist - distance(p, lights[i].pos);
-		if (diff <= 0.0) // If we're in the shadow
-			shadowStrength += 1.0/float(LIGHT_COUNT);
-			
-		else  // TODO: Solve mathematically
-		{
-			float off = SHADOW_EPSILON - closestDist;
-			if (off > 0.0)
-				shadowStrength += off;
-				
-		}
-
-		
-
-	}
-	return shadowStrength;
-}
-
-
-// Shadow strengths calculated in main
-float ambientOcclusionStrength = 0.5;
-float shadowStrength = 0.1;
-float fogStrength = 0.1;
-float stepEffectStrength = 1.0;
-//float ambientStepSize = 0.1;
-float ambientStepSize = 0.01;
-
-vec3 getColour(vec3 hitPos, vec3 viewer, float id, int shadowCalc)
-{
-	vec3 color = vec3(0.0);
-
-
-	// Legacy shadow code
-	//color -= vec3(calculateShadow(hitPos))*shadowStrength;
-	
-	// If we have a glossy object
-	#define BOUNCE_COUNT 1
-	vec3 prevPoint = eye;
-	if (id == float(NON_LIGHT_OBJECT_COUNT-1))
-	{
-		for (int i = 0; i < BOUNCE_COUNT; i++)
-		{
-			vec3 normal = estimateNormal(hitPos); // N
-			vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
-
-			vec3 bounceAngle = normalize(reflect(incidentVec, normal));
-			vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle, MIN_DIST, MAX_DIST);
-			float bounceDist = bounceHit.x;
-			float bounceId = bounceHit.y;
-			float bounceSteps = bounceHit.z;
-
-			vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
-
-			vec3 bounceColor = phongContribution(bounceHitPos, hitPos, bounceId, shadowCalc);
-
-			color = bounceColor;
-			prevPoint = hitPos;
-			hitPos = bounceHitPos;
-		}
-	}
-	else // Otherwise just use standard phong
-		color += phongContribution(hitPos, viewer, id, shadowCalc);
-
- 
-
-
-	color -= vec3(ambientOcclusion(hitPos, ambientStepSize))*ambientOcclusionStrength;
-
-	return color;
-}
-
-vec3 lightContrib(vec3 p, vec3 viewer, int shadowCalc)
+vec3 BRDF(vec3 p, vec3 viewer, float id, int shadowCalc)
 {
 	vec3 normal = estimateNormal(p); // N
 	vec3 incidentVec = normalize(viewer - p); // Normalize from origin (our viewer) // V
@@ -598,100 +333,41 @@ vec3 lightContrib(vec3 p, vec3 viewer, int shadowCalc)
 		vec3 lightVec = normalize(lights[i].pos - p); // Vector to light // L
 		vec3 reflectVec = normalize(reflect(-lightVec, normal));
 
-		// Check if we want to calculate shadows
-		if (shadowCalc == 1)
-		{
-			// Check if we are in view of light
-			vec2 march = shadowCheck(p + lightVec*0.1, lightVec, MIN_DIST, MAX_DIST);
-			float distToSceneLightDir = march.x;
-			float distToLight = distance(p, lights[i].pos);
+		// Calculate diffuse component
+		float diff = max(dot(lightVec, normal), 0.0);
 
-			float lightTolerance = 0.2;
-			float penTolerance = lightTolerance+0.7;
-			if (distToSceneLightDir < distToLight-lightSize-lightTolerance)
-				continue;
-			else if (distToSceneLightDir < distToLight-lightSize-penTolerance)
-				scaleDown -= march.y;
-		}
+		// Calculate specular component
+		float specAngle = max(dot(reflectVec, incidentVec), 0.0);
+		float spec = pow(specAngle, shininess/4.0) * specInf;
+
+		vec3 col = vec3(0.5);
+		if (id == 0.0)
+			col = albedo[0];
+		else if (id == 1.0)
+			col = albedo[1];
+		else if (id == 2.0)
+			col = albedo[2];
+		else if (id == 3.0)
+			col = albedo[3];
+		else if (id == 4.0)
+			col = albedo[4];
+		else if (id == 5.0)
+			col = albedo[5];
+		else if (id == 6.0)
+			col = albedo[6];
 
 
-		outCol += lights[i].colour*scaleDown;
+		outCol += col*diff+vec3(spec);
+		//outCol += vec3(spec);
 	}
 
 	return outCol;
 }
 
-//const float reflectID[OBJECT_COUNT] = float[OBJECT_COUNT](1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
 
 
-vec3 traceRender(vec3 dir, vec3 eye, float randOff)
-{
-	vec3 color = vec3(0.0);
-	
-
-	// Make an initial bounce
-	vec3 hit = getDistToScene(eye, dir, MIN_DIST, MAX_DIST);
-	float dist = hit.x;
-	float id = hit.y;
-	float steps = hit.z;
-
-	// Check to make sure we hit something
-	if (hit.y == -1.0) 
-		return vec3(0.0, 0.0, 0.0);
-
-	// The point our view ray hit
-	vec3 hitPos = eye + dist * dir;
-
-	float reflectivity = 0.1;
-	float variance = 0.1;
-
-	float bounceFalloff = 0.2;
-
-	#define TRACE_BOUNCE_COUNT 2
-	// Get contrib for first hit
-	color += phongContribution(hitPos, eye, id, 1);
-	vec3 prevPoint = eye;
-	float prevId = id;
-	for (int i = 0; i < TRACE_BOUNCE_COUNT; i++)
-	{
-		vec3 normal = estimateNormal(hitPos); // N
-		vec3 incidentVec = normalize(hitPos - prevPoint); // Normalize from origin (our viewer point) // V
-
-		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
-			variance = 0.0;
-		else
-			variance = 0.0;
-
-
-		vec3 bounceAngle = normalize(reflect(incidentVec, normal));
-		vec3 bounceHit = getDistToScene(hitPos + 0.1 * bounceAngle, bounceAngle+(vec3(rand(hitPos.xy), rand(vec2(hitPos.y+randOff, hitPos.z-randOff)), rand(vec2(hitPos.z, hitPos.x)))*variance), MIN_DIST, MAX_DIST);
-		float bounceDist = bounceHit.x;
-		float bounceId = bounceHit.y;
-		float bounceSteps = bounceHit.z;
-
-		// TODO: Solve programmatically
-		if (prevId == float(NON_LIGHT_OBJECT_COUNT-1))
-			reflectivity = 0.5;
-		else
-			reflectivity = 0.1;
-
-		vec3 bounceHitPos = hitPos + bounceDist * bounceAngle;
-
-		vec3 bounceColor = lightContrib(bounceHitPos, hitPos, 1)*reflectivity;
-
-		color += bounceColor*(bounceFalloff/float(i+1)); // Add in the color
-
-
-		prevPoint = hitPos;
-		prevId = bounceId;
-		hitPos = bounceHitPos;
-	}
-
-	return color;
-}
-
-
-vec3 fastRender(vec3 dir, vec3 eye)
+float fogStrength = 0.1;
+vec3 fastRender(vec3 dir, vec3 eye, int r)
 {
 	// Cast a ray from our eye (where we are) (set from JS) to the scene, get the dist	
 	// ID of the object we've hit (if any)
@@ -711,26 +387,32 @@ vec3 fastRender(vec3 dir, vec3 eye)
 	vec3 hitPos = eye + dist * dir;
 	
 
-	if (id >= float(NON_LIGHT_OBJECT_COUNT))
-		for (int i = 0; i < LIGHT_COUNT; i++) //TODO: More efficent solution
-			if (i == int(id)-NON_LIGHT_OBJECT_COUNT)
-				return lights[i].colour;
+	vec3 ohitPos = hitPos;
+	float odist = dist;
 
 
-	if (shadowWorld == 1) // Check for user settings for debugging needs etc.
-		color = vec3(calculateShadow(hitPos));
-	else if (ambientWorld == 1)
-		color = vec3(ambientOcclusion(hitPos, ambientStepSize));
-	else if (distWorld == 1)
-		color = vec3(steps/float(MAX_MARCHING_STEPS))*1.0;
-	else // Otherewise render scene normally
+	#define BOUNCES 3
+	for (int i = 0; i < BOUNCES; i++)
 	{
-		color = getColour(hitPos, eye, id, shadowCalcPhong);
-		// Attenuate to the distance (fog)
-		color -= dist/MAX_DIST*fogStrength;
+		vec3 rdir = reflect(dir, estimateNormal(dir))*(rand(vec2(ohitPos.x+cos(iTime), ohitPos.z+sin(iTime)+float(r)))*0.3);
+		vec3 nhit = getDistToScene(ohitPos, rdir, MIN_DIST, MAX_DIST);
+		float ndist = hit.x;
+		float nid = hit.y;
+		float nsteps = hit.z;
 
-		color -= vec3(steps/float(MAX_MARCHING_STEPS))*stepEffectStrength;
+		vec3 nhitPos = ohitPos + ndist * rdir;
+
+		color += BRDF(nhitPos, ohitPos, nid, 0);
+
+		ohitPos = nhitPos;
+		odist = ndist;
+
 	}
+
+	color /= float(BOUNCES);
+
+	// Attenuate to the distance (fog)
+	color -= dist/MAX_DIST*fogStrength;
 
 	return color;
 }
@@ -739,22 +421,26 @@ vec3 fastRender(vec3 dir, vec3 eye)
 // You tell me :^)
 void main()
 {
+	albedo[0] = vec3(1.0, 0.0, 0.0);
+	albedo[1] = vec3(1.0, 0.0, 1.0);
+	albedo[2] = vec3(1.0, 1.0, 0.0);
+	albedo[3] = vec3(0.0, 1.0, 0.0);
+	albedo[4] = vec3(1.0, 0.0, 1.0);
+	albedo[5] = vec3(1.0, 1.0, 0.5);
+	albedo[6] = vec3(0.0, 1.0, 1.0);
+
+
 	// Get the angle of our ray
 	vec3 dir = rayDirection(fieldOfView, iResolution.xy, gl_FragCoord.xy, vec3(eyeX, eyeY, 0.0));
 
-
 	vec3 color = vec3(0.0);
 
-	if (pbr == 0)
-		color = fastRender(dir, eye);
-	#define RENDER_PASSES 1
-	else
-	{
-		for (int i = 0; i < RENDER_PASSES; i++)
-			color += traceRender(dir, eye, float(i));
-		color /= float(RENDER_PASSES);
-	}
 
+	#define SAMPLES 10
+	for (int i = 0; i < SAMPLES; i++)
+		color += fastRender(dir, eye, i);
+
+	color /= float(SAMPLES);
 
 	gl_FragColor = vec4(color, 1.0);
 }
