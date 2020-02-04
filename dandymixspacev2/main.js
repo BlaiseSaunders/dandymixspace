@@ -92,6 +92,14 @@ function init()
 
 	document.getElementById("info").innerHTML = '';
 
+
+	scale = 5
+	renderer.setSize( window.innerWidth / scale, window.innerHeight / scale );
+	document.body.appendChild( renderer.domElement );
+	renderer.domElement.style.width = renderer.domElement.width * scale + 'px';
+	renderer.domElement.style.height = renderer.domElement.height * scale + 'px';
+	renderer.setPixelRatio( window.devicePixelRatio );
+
 	console.log("Initialized DandyDance Web :^)")
 	onWindowResize();
 }
@@ -178,6 +186,11 @@ function onWindowResize()
 
 function animate() 
 {
+	renderer.setPixelRatio( window.devicePixelRatio );
+	if (window.innerWidth < 1080)
+		window.z = 10*(1-(window.innerWidth/1080))+2.0;
+	else
+		window.z = 2.0
 
 
 	speedScale = 0.5; // TODO: Scale for FPS
