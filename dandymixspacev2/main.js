@@ -224,7 +224,7 @@ function animate()
 	requestAnimationFrame(animate);
 
 	
-	screenMaterial.uniforms.iTime.value = window.performance.now()/4000;
+	screenMaterial.uniforms.iTime.value = window.performance.now()/2000;
 	let screenx = window.innerWidth * dpr;
 	let screeny = window.innerHeight * dpr;
 	screenMaterial.uniforms.iResolution.value = new THREE.Vector2(screenx, screeny);
