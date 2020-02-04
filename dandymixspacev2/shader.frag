@@ -389,16 +389,19 @@ vec3 fastRender(vec3 dir, vec3 eye, int r)
 
 	vec3 ohitPos = hitPos;
 	float odist = dist;
+	vec3 ndir = dir;
 
+	color += BRDF(hitPos, eye, id, 0);
 
-	#define BOUNCES 3
+	#define BOUNCES 2
 	for (int i = 0; i < BOUNCES; i++)
 	{
-		vec3 rdir = reflect(dir, estimateNormal(dir))*(rand(vec2(ohitPos.x+cos(iTime), ohitPos.z+sin(iTime)+float(r)))*0.3);
+		//vec3 rdir = reflect(ndir, estimateNormal(ohitPos))*(rand(vec2(ndir.x+cos(odist), ohitPos.z+sin(iTime)+float(r)))*1.0);
+		vec3 rdir = reflect(ndir, estimateNormal(ohitPos))*1.0;
 		vec3 nhit = getDistToScene(ohitPos, rdir, MIN_DIST, MAX_DIST);
 		float ndist = hit.x;
-		float nid = hit.y;
-		float nsteps = hit.z;
+		float nid = nhit.y;
+		float nsteps = nhit.z;
 
 		vec3 nhitPos = ohitPos + ndist * rdir;
 
@@ -406,10 +409,11 @@ vec3 fastRender(vec3 dir, vec3 eye, int r)
 
 		ohitPos = nhitPos;
 		odist = ndist;
+		ndir = rdir;
 
 	}
 
-	color /= float(BOUNCES);
+	color /= float(BOUNCES)/1.0;
 
 	// Attenuate to the distance (fog)
 	color -= dist/MAX_DIST*fogStrength;
@@ -436,7 +440,7 @@ void main()
 	vec3 color = vec3(0.0);
 
 
-	#define SAMPLES 10
+	#define SAMPLES 4
 	for (int i = 0; i < SAMPLES; i++)
 		color += fastRender(dir, eye, i);
 
