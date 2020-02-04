@@ -58,20 +58,25 @@ function init()
 {
 	console.log("Initializing DandyDance Web :^)...")
 
-	camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 10);
-	camera.position.z = 1;
 
-	scene = new THREE.Scene();
-
-
-	createTracerSurface();
 
 
 	// Setup our renderer 
 	renderer = new THREE.WebGLRenderer({antialias: true});
-	renderer.setSize(window.innerWidth, window.innerHeight);
+	window.scale = 2
+	renderer.domElement.style.width = renderer.domElement.width * scale + 'px';
+	renderer.domElement.style.height = renderer.domElement.height * scale + 'px';
+	renderer.setPixelRatio( window.devicePixelRatio / scale );
+	renderer.setSize( window.innerWidth / scale, window.innerHeight / scale );
 	document.body.appendChild(renderer.domElement);
 	window.addEventListener('resize', onWindowResize, false);
+
+
+	scene = new THREE.Scene();
+	createTracerSurface();
+	
+	camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 10);
+	camera.position.z = 1;
 
 
 	window.x = 0;
@@ -93,12 +98,6 @@ function init()
 	document.getElementById("info").innerHTML = '';
 
 
-	scale = 5
-	renderer.setSize( window.innerWidth / scale, window.innerHeight / scale );
-	document.body.appendChild( renderer.domElement );
-	renderer.domElement.style.width = renderer.domElement.width * scale + 'px';
-	renderer.domElement.style.height = renderer.domElement.height * scale + 'px';
-	renderer.setPixelRatio( window.devicePixelRatio );
 
 	console.log("Initialized DandyDance Web :^)")
 	onWindowResize();
@@ -186,7 +185,7 @@ function onWindowResize()
 
 function animate() 
 {
-	renderer.setPixelRatio( window.devicePixelRatio );
+
 	if (window.innerWidth < 1080)
 		window.z = 10*(1-(window.innerWidth/1080))+2.0;
 	else
@@ -238,8 +237,8 @@ function animate()
 
 	
 	screenMaterial.uniforms.iTime.value = window.performance.now()/2000;
-	let screenx = window.innerWidth * dpr;
-	let screeny = window.innerHeight * dpr;
+	let screenx = window.innerWidth * dpr / window.scale;
+	let screeny = window.innerHeight * dpr / window.scale;
 	screenMaterial.uniforms.iResolution.value = new THREE.Vector2(screenx, screeny);
 	screenMaterial.uniforms.eye.value = new THREE.Vector3(window.x, window.y, window.z);
 	screenMaterial.uniforms.eyeY.value = window.yrot;
