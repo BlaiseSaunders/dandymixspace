@@ -31,16 +31,41 @@ animate();
 		  (doc && doc.scrollTop  || body && body.scrollTop  || 0) -
 		  (doc && doc.clientTop  || body && body.clientTop  || 0 );
 	    }
+
+
+	    var mScale = 1.0;
     
 	    var xPos = event.pageX/window.innerWidth*1.0;
 	    var yPos = event.pageY/window.innerHeight*1.0;
-	    window.x = (xPos-0.5)*2.0;
-	    window.y = (1.0-yPos-0.5)*2.0;
+	    window.x = (xPos-0.5)*2.0 * mScale; 
+	    window.y = (1.0-yPos-0.5)*2.0 * mScale;
 
-	    window.yrot = 1.0-xPos-0.5;
-	    window.xrot = 1.0-yPos-0.5;
+	    window.yrot = 1.0-xPos-0.5 * mScale;
+	    window.xrot = 1.0-yPos-0.5 * mScale;
 	}
 })();
+
+window.addEventListener("deviceorientation", handleOrientation, true);
+
+function handleOrientation(event) 
+{
+	var absolute = event.absolute;
+	var alpha    = event.alpha;
+	var beta     = event.beta;
+	var gamma    = event.gamma;
+      
+
+
+	var xPos = (gamma+90)/180;
+	var yPos = (beta+180)/360;
+
+
+	window.x = (xPos-0.5)*2.0;
+	window.y = (1.0-yPos-0.5)*2.0;
+
+	window.yrot = 1.0-xPos-0.5;
+	window.xrot = 1.0-yPos-0.5;
+}
 
 
 function toggleClass(classval, displayval, newclassval)
@@ -186,10 +211,10 @@ function onWindowResize()
 function animate() 
 {
 
-	if (window.innerWidth < 1080)
-		window.z = 10*(1-(window.innerWidth/1080))+2.0;
+	/*if (window.innerWidth < 1080)
+		window.z = 0*(1-(window.innerWidth/1080))+2.0;
 	else
-		window.z = 2.0
+		window.z = 2.0*/
 
 
 	speedScale = 0.5; // TODO: Scale for FPS
